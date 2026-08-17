@@ -10,7 +10,7 @@ from typing import List
 
 from seedsigner.hardware.buttons import HardwareButtons, HardwareButtonsConstants
 from seedsigner.helpers.qr import QR
-from seedsigner.gui.components import (Button, FontAwesomeIconConstants, Fonts, FormattedAddress, IconButton,
+from seedsigner.gui.components import (SCALE, Button, FontAwesomeIconConstants, Fonts, FormattedAddress, IconButton,
     IconTextLine, SeedSignerIconConstants, TextArea, GUIConstants, reflow_text_into_pages)
 from seedsigner.gui.keyboard import Keyboard, T9Pad, TextEntryDisplay
 from seedsigner.gui.renderer import Renderer
@@ -545,11 +545,11 @@ class SeedMnemonicEntryQwertyScreen(SeedMnemonicEntryScreen):
     """
     QWERTY_ROWS = ["qwertyuiop", "asdfghjkl", "zxcvbnm"]
 
-    # Native px (the panel doubles these). 44 -> 88 physical px, the same
-    # target height as every other tappable control in this build, and taller
-    # than the Flex's 72 because this panel has the room.
-    KEY_HEIGHT = 44
-    SUGGESTION_HEIGHT = 30
+    # 88 physical px: the same target height as every other tappable control
+    # in this build, and taller than the Flex's 72 because this panel has the
+    # room. Scaled so the 240x320 canvas keeps its original proportions.
+    KEY_HEIGHT = 44 * SCALE
+    SUGGESTION_HEIGHT = 30 * SCALE
     MAX_VISIBLE_SUGGESTIONS = 2
 
     def __post_init__(self):

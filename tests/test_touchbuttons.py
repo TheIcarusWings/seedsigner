@@ -130,9 +130,9 @@ class TestBackAndPowerButtons:
         assert tb._check_back_button_tap(10, 10) is True
 
     def test_back_button_at_boundary(self):
-        """Tap at native (47, 47) = screen (94, 94) still hits."""
+        """Tap just inside the 96px top-left corner region still hits."""
         tb = self._make_buttons()
-        assert tb._check_back_button_tap(94, 94) is True
+        assert tb._check_back_button_tap(95, 95) is True
 
     def test_back_button_miss_right(self):
         """Tap at screen (200, 10) misses back button."""
@@ -152,7 +152,7 @@ class TestBackAndPowerButtons:
         assert tb._check_power_button_tap(460, 10) is True
 
     def test_power_button_miss_left(self):
-        """Tap at screen (200, 10) misses power button."""
+        """Tap left of the top-right corner region misses power button."""
         tb = self._make_buttons()
         assert tb._check_power_button_tap(200, 10) is False
 
@@ -190,8 +190,8 @@ class TestButtonTapDetection:
         # Register a button at native (60, 60) with size 120x40
         btn = self._mock_button(60, 60, 120, 40)
         tb.register_buttons([btn])
-        # Tap at screen (240, 160) = native (120, 80), inside the button
-        assert tb._check_button_tap(240, 160) == 0
+        # Canvas and touch share one space now: (120, 80) is inside the button
+        assert tb._check_button_tap(120, 80) == 0
 
     def test_tap_misses_button(self):
         """Tap outside registered buttons returns -1."""
@@ -215,8 +215,8 @@ class TestButtonTapDetection:
         btn1 = self._mock_button(0, 110, 240, 40)
         btn2 = self._mock_button(0, 160, 240, 40)
         tb.register_buttons([btn0, btn1, btn2])
-        # Tap on btn1: native (120, 130) = screen (240, 260)
-        assert tb._check_button_tap(240, 260) == 1
+        # Tap on btn1 at (120, 130), canvas coords == touch coords
+        assert tb._check_button_tap(120, 130) == 1
 
     def test_clear_buttons(self):
         """clear_buttons() removes all registered buttons."""

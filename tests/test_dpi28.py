@@ -307,10 +307,10 @@ class TestDriverConstants:
             return DPI28(_width=DPI28.NATIVE_WIDTH, _height=DPI28.NATIVE_HEIGHT)
 
     def test_native_dimensions(self):
-        """Driver reports 240x240 native size to SeedSigner."""
+        """Driver renders at the panel's own resolution, so native == physical."""
         driver = self._make_driver()
-        assert driver.width == 240
-        assert driver.height == 320
+        assert driver.width == 480
+        assert driver.height == 640
 
     def test_display_constants(self):
         """Display constants match Waveshare 2.8" specs."""

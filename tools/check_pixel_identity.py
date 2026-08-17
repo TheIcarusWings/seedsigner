@@ -125,6 +125,11 @@ def main() -> int:
                     help="keep both render dirs for manual diffing")
     ap.add_argument("--python", default=None,
                     help="interpreter to render with (default: this one)")
+    ap.add_argument("--allow", action="append", default=[], metavar="PATH",
+                    help="accept a known-intentional difference, e.g. "
+                         "settings_views/Foo.png. Repeatable. Named on the "
+                         "command line rather than hardcoded, so every accepted "
+                         "change stays a visible, deliberate decision.")
     args = ap.parse_args()
 
     root = repo_root()
@@ -191,12 +196,15 @@ def main() -> int:
                   f"rather than trusting the result.")
             return 2
 
-        differing, skipped, network_flagged = [], [], []
+        allowed_spec = {a.replace("\\", "/") for a in args.allow}
+        differing, skipped, network_flagged, allowed = [], [], [], []
         for name in common:
             if base_idx[name] == head_idx[name]:
                 continue
             stem = Path(name).stem
-            if stem.endswith(GIT_STATE_SUFFIX):
+            if name.replace("\\", "/") in allowed_spec:
+                allowed.append(name)
+            elif stem.endswith(GIT_STATE_SUFFIX):
                 skipped.append(name)
             elif stem in NETWORK_DEPENDENT:
                 network_flagged.append(name)
@@ -208,6 +216,11 @@ def main() -> int:
         # Never hide what was excluded from the verdict.
         for name in skipped:
             print(f"    skipped (renders live git state): {name}")
+        for name in allowed:
+            print(f"    DIFFERS, accepted via --allow: {name}")
+        for name in sorted(allowed_spec - set(allowed)):
+            # A stale --allow hides future regressions in that file.
+            print(f"    note: --allow {name} matched nothing (no longer differs?)")
         for name in network_flagged:
             print(f"    DIFFERS, but depends on the GitHub releases fetch: {name}")
             print(f"      -> re-run before treating this as a regression")

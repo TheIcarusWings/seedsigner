@@ -50,11 +50,11 @@ class E2ERenderer(Renderer):
         cls._instance = renderer
         # Screens resolve the singleton via the base class
         Renderer._instance = renderer
-        renderer.canvas_width = 240
-        renderer.canvas_height = 320          # full-panel native size
-        renderer.canvas = Image.new("RGB", (240, 320))
+        renderer.canvas_width = 480
+        renderer.canvas_height = 640          # rendered at the panel's own size
+        renderer.canvas = Image.new("RGB", (480, 640))
         renderer.draw = ImageDraw.Draw(renderer.canvas)
-        renderer.disp = DPI28Emulator(_width=240, _height=320)
+        renderer.disp = DPI28Emulator(_width=480, _height=640)
         renderer.display_type = "dpi28"
         renderer.frames = 0
 
@@ -97,7 +97,8 @@ def button_center_screen_coords(screen, index):
     btn = screen.buttons[index]
     native_x = getattr(btn, "screen_x", 0) + btn.width // 2
     native_y = btn.screen_y - getattr(btn, "scroll_y", 0) + btn.height // 2
-    return native_x * 2, native_y * 2
+    # Canvas is the panel now, so no conversion.
+    return native_x, native_y
 
 
 def wait_for_render(screen, holder, timeout=5.0):
@@ -356,7 +357,7 @@ def s10():
     expected = screen.possible_words[0]
 
     btn = screen.matches_list_highlight_button
-    tap((btn.screen_x + btn.width // 2) * 2, (btn.screen_y + btn.height // 2) * 2)
+    tap(btn.screen_x + btn.width // 2, btn.screen_y + btn.height // 2)
 
     result = finish(thread, holder)
     assert result == expected, f"expected {expected!r} selected, got {result!r}"
@@ -381,9 +382,10 @@ def s11():
             assert 0 <= key.screen_x and right <= screen.canvas_width, (
                 f"key {key.letter!r} spans {key.screen_x}..{right}, canvas is "
                 f"0..{screen.canvas_width}")
-    # Physical px = native * 2; ~4mm is the Ledger Flex key width.
-    assert kb.key_width * 2 >= 40, f"keys only {kb.key_width * 2}px wide"
-    assert kb.key_height * 2 >= 72, f"keys only {kb.key_height * 2}px tall"
+    # Canvas is the panel, so these are already physical px.
+    # ~4mm is the Ledger Flex key width; its keys are 72px tall.
+    assert kb.key_width >= 40, f"keys only {kb.key_width}px wide"
+    assert kb.key_height >= 72, f"keys only {kb.key_height}px tall"
 
 
 def wait_for_render_keyboard(screen, holder, timeout=5.0):
@@ -412,7 +414,7 @@ def tap_key(screen, key):
     kb = screen.keyboard
     x = key.screen_x + (kb.key_width * key.size) // 2
     y = key.screen_y + kb.key_height // 2
-    tap(x * 2, y * 2)
+    tap(x, y)
 
 
 def main():
