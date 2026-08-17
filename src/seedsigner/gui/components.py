@@ -121,15 +121,47 @@ def get_rounded_rect_mask(width: int, height: int, radius: int, outline_width: i
     return mask.resize((width, height), Image.LANCZOS)
 
 
+# Native-resolution scaling for the touch build.
+#
+# The touch build draws at the panel's full 480x640 instead of rendering a
+# 240x320 canvas and upscaling it 2x in DPI28.compose(). Layout is unchanged -
+# every pixel-valued constant below is simply doubled - but text and corners
+# are rendered at true resolution instead of being stair-stepped by a nearest-
+# neighbour upscale.
+#
+# Measured on a Pi Zero W: this costs ~1% of preview frame time and leaves the
+# QR scan rate unchanged, because the mode also deletes compose()'s upscale and
+# the dominant framebuffer write is 480x640 either way.
+#
+# SCALE is 1 on non-touch builds, so ST7789/GPIO rendering stays byte-for-byte
+# identical to upstream. tools/check_pixel_identity.py enforces that.
+#
+# Evaluated at import time, which is safe: seedsigner.gui.__init__ imports
+# renderer first, and renderer's module-level detection sets SEEDSIGNER_TOUCH
+# before this module's body runs.
+SCALE = 2 if is_touch_ui() else 1
+
+
+def _scaled(sizes: dict) -> dict:
+    """Scale a locale -> font-size table. Identity when SCALE is 1."""
+    return {locale: size * SCALE for locale, size in sizes.items()}
+
+
 class GUIConstants:
-    EDGE_PADDING = 8
-    COMPONENT_PADDING = 8
-    LIST_ITEM_PADDING = 4
+    # Side margins. The Ledger Flex uses 32px on a near-identical panel against
+    # our previous 16. 24px was tried first and truncated real labels ("Enter
+    # 12-word seed" on LoadSeedView clipped to "...seec"), so 20px is the
+    # widest that still fits the longest shipped button text. Check
+    # LoadSeedView before widening this further.
+    # Non-touch keeps upstream's 8 untouched.
+    EDGE_PADDING = (10 if is_touch_ui() else 8) * SCALE
+    COMPONENT_PADDING = 8 * SCALE
+    LIST_ITEM_PADDING = 4 * SCALE
 
     # Gap between a stacked icon and its label (Home tiles). Deliberately
     # larger than COMPONENT_PADDING: these are big touch targets where the
     # icon and label must read as two separate elements, not one crowded block.
-    STACKED_ICON_LABEL_PADDING = 16
+    STACKED_ICON_LABEL_PADDING = 16 * SCALE
 
     BACKGROUND_COLOR = "#000000"
     INACTIVE_COLOR = "#414141"
@@ -146,11 +178,11 @@ class GUIConstants:
 
     ICON_FONT_NAME__FONT_AWESOME = "Font_Awesome_6_Free-Solid-900"
     ICON_FONT_NAME__SEEDSIGNER = "seedsigner-icons"
-    ICON_FONT_SIZE = 22
-    ICON_INLINE_FONT_SIZE = 24
-    ICON_LARGE_BUTTON_SIZE = 48
-    ICON_TOAST_FONT_SIZE = 30
-    ICON_PRIMARY_SCREEN_SIZE = 50
+    ICON_FONT_SIZE = 22 * SCALE
+    ICON_INLINE_FONT_SIZE = 24 * SCALE
+    ICON_LARGE_BUTTON_SIZE = 48 * SCALE
+    ICON_TOAST_FONT_SIZE = 30 * SCALE
+    ICON_PRIMARY_SCREEN_SIZE = 50 * SCALE
 
     BASE_LOCALE_FONTS = {
         "default": "OpenSans-Regular",
@@ -165,26 +197,27 @@ class GUIConstants:
 
     TOP_NAV_TITLE_FONT_NAME = BASE_LOCALE_FONTS.copy()
     TOP_NAV_TITLE_FONT_NAME["default"] = "OpenSans-SemiBold"
-    TOP_NAV_TITLE_FONT_SIZE = {
+    TOP_NAV_TITLE_FONT_SIZE = _scaled({
         "default": 20,
         SettingsConstants.LOCALE__CHINESE_SIMPLIFIED: 23,  # Some chars won't render below 23px
         SettingsConstants.LOCALE__HINDI: 22,
         SettingsConstants.LOCALE__JAPANESE: 22,  # Titles won't render below 22px
         SettingsConstants.LOCALE__KOREAN: 23,    # Titles won't render below 23px
-    }
-    TOP_NAV_HEIGHT = 48
-    TOP_NAV_BUTTON_SIZE = 32
+    })
+    TOP_NAV_HEIGHT = 48 * SCALE
+    TOP_NAV_BUTTON_SIZE = 32 * SCALE
 
     BODY_FONT_NAME = BASE_LOCALE_FONTS.copy()
-    BODY_FONT_SIZE = {
+    BODY_FONT_SIZE = _scaled({
         "default": 17,
         SettingsConstants.LOCALE__CHINESE_SIMPLIFIED: 18,
         SettingsConstants.LOCALE__HINDI: 18,
         SettingsConstants.LOCALE__JAPANESE: 18,
         SettingsConstants.LOCALE__KOREAN: 18,
-    }
+    })
+    # Already scaled via the tables/constants they derive from; do not re-scale.
     BODY_FONT_MAX_SIZE = TOP_NAV_TITLE_FONT_SIZE["default"]
-    BODY_FONT_MIN_SIZE = 15
+    BODY_FONT_MIN_SIZE = 15 * SCALE
     BODY_FONT_COLOR = "#FCFCFC"
     BODY_LINE_SPACING = COMPONENT_PADDING
 
@@ -197,7 +230,7 @@ class GUIConstants:
 
     BUTTON_FONT_NAME = BASE_LOCALE_FONTS.copy()
     BUTTON_FONT_NAME["default"] = "OpenSans-SemiBold"
-    BUTTON_FONT_SIZE = {
+    BUTTON_FONT_SIZE = _scaled({
         "default": 18,
         "ar": 18,
         "fa": 18,
@@ -205,10 +238,10 @@ class GUIConstants:
         SettingsConstants.LOCALE__JAPANESE: 20,
         SettingsConstants.LOCALE__KOREAN: 20,
         SettingsConstants.LOCALE__CHINESE_SIMPLIFIED: 20,
-    }
+    })
     BUTTON_FONT_COLOR = "#FCFCFC"
     BUTTON_BACKGROUND_COLOR = "#2C2C2C"
-    BUTTON_HEIGHT = 32
+    BUTTON_HEIGHT = 32 * SCALE
     BUTTON_SELECTED_FONT_COLOR = BACKGROUND_COLOR
     
     NOTIFICATION_COLOR = "#00F100"

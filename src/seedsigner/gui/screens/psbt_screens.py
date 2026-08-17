@@ -7,11 +7,11 @@ from gettext import ngettext
 from PIL import Image, ImageDraw, ImageFilter
 
 from seedsigner.gui.components import (BtcAmount, Icon, FontAwesomeIconConstants, IconTextLine, FormattedAddress, GUIConstants, Fonts, SeedSignerIconConstants, TextArea,
-    calc_bezier_curve, linear_interp)
+    calc_bezier_curve, is_touch_ui, linear_interp)
 from seedsigner.gui.renderer import Renderer
 from seedsigner.models.threads import BaseThread
 
-from .screen import ButtonListScreen, ButtonOption
+from .screen import ButtonListScreen, ButtonOption, RET_CODE__BACK_BUTTON
 
 
 
@@ -780,6 +780,70 @@ class PSBTFinalizeScreen(ButtonListScreen):
         self.components.append(icon)
 
         self.components.append(TextArea(
-            text=_("Click to approve this transaction"),
+            text=(_("Hold the button to sign this transaction") if is_touch_ui()
+                  else _("Click to approve this transaction")),
             screen_y=icon.screen_y + icon.height + 2*GUIConstants.COMPONENT_PADDING
         ))
+
+
+    # Signing is irreversible, and on a touch panel a single tap is far too
+    # easy to trigger by accident (a stray brush, a mis-aimed tap on the screen
+    # below). A deliberate press-and-hold is the confirmation the original
+    # brief asked for. 2.5s is long enough to be unmistakably intentional
+    # without feeling like the device has hung.
+    HOLD_TO_SIGN_MS = 2500
+
+    # Thickness of the fill bar drawn along the bottom of the approve button.
+    HOLD_BAR_HEIGHT = 6 * (2 if is_touch_ui() else 1)
+
+    def _paint_hold_progress(self, fraction: float):
+        """Draw the hold fill across the bottom of the approve button."""
+        button = self.buttons[0]
+        with self.renderer.lock:
+            button.render()
+            y1 = button.screen_y + button.height - button.scroll_y
+            y0 = y1 - self.HOLD_BAR_HEIGHT
+            self.image_draw.rectangle(
+                (button.screen_x, y0,
+                 button.screen_x + int(button.width * fraction), y1),
+                fill=GUIConstants.SUCCESS_COLOR,
+            )
+            self.renderer.show_image()
+
+    def _reset_hold_progress(self):
+        """Clear the fill and re-prompt after an aborted hold."""
+        with self.renderer.lock:
+            self.buttons[0].render()
+            self.renderer.show_image()
+
+    def _run(self):
+        if not is_touch_ui():
+            # GPIO/ST7789 builds keep upstream's click-to-approve untouched.
+            return super()._run()
+
+        from seedsigner.hardware.touchbuttons import TouchButtons
+
+        while True:
+            outcome = self.hw_inputs.wait_for_hold(
+                button_index=0,
+                duration_ms=self.HOLD_TO_SIGN_MS,
+                on_progress=self._paint_hold_progress,
+                on_cancel=self._reset_hold_progress,
+            )
+
+            if outcome == TouchButtons.HOLD__BACK:
+                return RET_CODE__BACK_BUTTON
+
+            if outcome == TouchButtons.HOLD__COMPLETED:
+                return 0
+
+            # Released early. Say so rather than silently resetting, which
+            # would read as an unresponsive button.
+            with self.renderer.lock:
+                TextArea(
+                    text=_("Keep holding to sign"),
+                    font_color=GUIConstants.WARNING_COLOR,
+                    screen_y=self.buttons[0].screen_y - GUIConstants.BODY_FONT_SIZE["default"]
+                             - GUIConstants.COMPONENT_PADDING,
+                ).render()
+                self.renderer.show_image()

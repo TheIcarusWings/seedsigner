@@ -71,13 +71,18 @@ class DPI28(BaseDisplayDriver):
     physical 480x640 layout is internal to this driver).
     """
 
-    # Native UI size (what SeedSigner renders). 240x320 is the panel's true
-    # 3:4 ratio, so a 2x nearest-neighbour upscale fills the whole 480x640
-    # panel exactly - no letterbox, no reserved strip. (This replaced a
-    # 240x240 canvas whose 480x480 output left the bottom 160px as a
-    # permanent button bar.)
-    NATIVE_WIDTH = 240
-    NATIVE_HEIGHT = 320
+    # Native UI size (what SeedSigner renders) == the physical panel.
+    #
+    # The UI used to draw 240x320 and rely on a 2x nearest-neighbour upscale in
+    # compose(). Drawing at the panel's own resolution instead makes text and
+    # corners sharp rather than stair-stepped, at ~1% of preview frame time:
+    # the mode removes the upscale it adds to the initial resize, and the
+    # dominant framebuffer write is 480x640 either way (measured on a Zero W).
+    #
+    # GUIConstants.SCALE doubles every pixel constant to match, so layout is
+    # unchanged. Non-touch builds keep SCALE == 1 and are unaffected.
+    NATIVE_WIDTH = 480
+    NATIVE_HEIGHT = 640
 
     # Physical display size
     DISPLAY_WIDTH = 480
@@ -301,15 +306,21 @@ class DPI28(BaseDisplayDriver):
 
     def compose(self, image: Image.Image) -> Image.Image:
         """
-        Build the full 480x640 physical-panel frame from a native 240x320 UI
-        canvas: 2x nearest-neighbor upscale, plus the control bar if one is set.
+        Build the full 480x640 physical-panel frame from the UI canvas, plus
+        the control bar if one is set.
 
-        Pure PIL, no framebuffer access — also used by the emulator/screenshot
-        paths to render exactly what the panel would show.
+        The canvas is now rendered at the panel's own resolution, so this is
+        normally a no-op passthrough. The resize is kept as a guard for callers
+        that still hand over an off-size image (the emulator and screenshot
+        paths reuse this to render exactly what the panel would show).
+
+        Pure PIL, no framebuffer access.
         """
-        # Scale the native canvas 2x to the full panel (nearest neighbour so
-        # pixels stay sharp rather than smeared).
-        display = image.resize((self.UI_WIDTH, self.UI_HEIGHT), Image.NEAREST)
+        if image.size != (self.UI_WIDTH, self.UI_HEIGHT):
+            # Nearest neighbour so pixels stay sharp rather than smeared.
+            display = image.resize((self.UI_WIDTH, self.UI_HEIGHT), Image.NEAREST)
+        else:
+            display = image
         if display.mode != 'RGB':
             display = display.convert('RGB')
 

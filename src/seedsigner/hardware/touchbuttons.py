@@ -48,15 +48,41 @@ class TouchButtons(Singleton):
     """
 
     # Screen layout for 480x640 display
-    # UI area: 480x480 (top), scaled 2x from 240x240
     # Touch bar: 480x160 (bottom) - KEY1, KEY2, KEY3
     SCREEN_WIDTH = 480
     SCREEN_HEIGHT = 640
-    # The UI now fills the whole panel (240x320 native, 2x upscaled). The
-    # control bar is an OVERLAY that only exists while a screen asks for one,
-    # so the bottom strip is ordinary content the rest of the time.
+    # The UI fills the whole panel and is now drawn at the panel's own
+    # resolution, so the canvas and the touch surface share one coordinate
+    # space. The control bar is an OVERLAY that only exists while a screen asks
+    # for one, so the bottom strip is ordinary content the rest of the time.
     UI_HEIGHT = 640
     TOUCH_BAR_TOP = 480
+
+    # Panel pixels -> canvas pixels.
+    #
+    # This was 2 while the UI drew a 240x320 canvas that DPI28.compose()
+    # upscaled to the panel. Native rendering draws at 480x640 directly, so
+    # touch input and the canvas are 1:1 and no conversion is needed.
+    #
+    # Kept as a named constant rather than deleting the arithmetic: it keeps
+    # the 240x320 path a one-line revert, and it makes the remaining literal
+    # `/ 2` expressions in this file unambiguously centre calculations rather
+    # than forgotten scale conversions.
+    PANEL_TO_CANVAS = 1
+
+    # Top-nav corner hit regions, in canvas pixels. Mirrors
+    # GUIConstants.TOP_NAV_HEIGHT (48 * SCALE); kept local so the input layer
+    # does not have to import the whole GUI stack.
+    CORNER_HIT_SIZE = 96
+
+    # Height of the scroll-indicator chevrons drawn at the top and bottom of
+    # the centre column. They are decoration, so taps there must not activate
+    # whatever button sits underneath.
+    #
+    # This was previously hardcoded as `native_y < 48 or native_y > 226`, where
+    # 226 assumed a 240px-tall UI. That was already stale on the 240x320
+    # canvas; deriving it from UI_HEIGHT keeps it correct at any canvas size.
+    SCROLL_INDICATOR_BAND = 28
 
     # Re-export constants
     KEY_UP = HardwareButtonsConstants.KEY_UP
@@ -210,7 +236,7 @@ class TouchButtons(Singleton):
 
     def _control_key_at(self, touch_x: int, touch_y: int):
         """Key of the on-canvas control under this touch, or None."""
-        native_x, native_y = touch_x // 2, touch_y // 2
+        native_x, native_y = touch_x // self.PANEL_TO_CANVAS, touch_y // self.PANEL_TO_CANVAS
         for x, y, w, h, key in self.control_rects:
             if x <= native_x <= x + w and y <= native_y <= y + h:
                 return key
@@ -298,14 +324,11 @@ class TouchButtons(Singleton):
         Returns:
             True if back button was tapped
         """
-        # Back button is roughly in the top-left 60x60 area (native coords)
-        # In screen coords that's 120x120
-        native_x = touch_x // 2
-        native_y = touch_y // 2
+        native_x = touch_x // self.PANEL_TO_CANVAS
+        native_y = touch_y // self.PANEL_TO_CANVAS
 
-        # Check if in top nav area (top ~48 pixels in native coords)
-        # and in the left side (left ~48 pixels)
-        if native_y < 48 and native_x < 48:
+        # Top-left corner of the top nav.
+        if native_y < self.CORNER_HIT_SIZE and native_x < self.CORNER_HIT_SIZE:
             return True
         return False
 
@@ -319,12 +342,12 @@ class TouchButtons(Singleton):
         Returns:
             True if power button was tapped
         """
-        native_x = touch_x // 2
-        native_y = touch_y // 2
+        native_x = touch_x // self.PANEL_TO_CANVAS
+        native_y = touch_y // self.PANEL_TO_CANVAS
 
-        # Check if in top nav area (top ~48 pixels in native coords)
-        # and in the right side (right ~48 pixels, so x > 192 for 240 width)
-        if native_y < 48 and native_x > 192:
+        # Top-right corner of the top nav.
+        if (native_y < self.CORNER_HIT_SIZE
+                and native_x > self.SCREEN_WIDTH - self.CORNER_HIT_SIZE):
             return True
         return False
 
@@ -346,16 +369,15 @@ class TouchButtons(Singleton):
             return -1
 
         # Convert screen coords (480x480) to native coords (240x240)
-        native_x = touch_x // 2
-        native_y = touch_y // 2
+        native_x = touch_x // self.PANEL_TO_CANVAS
+        native_y = touch_y // self.PANEL_TO_CANVAS
 
-        # Exclude scroll indicator zones - these are visual only, not tappable
-        # Up arrow indicator: y < 48 (below top_nav header area)
-        # Down arrow indicator: y > 226 (bottom 14px of 240px UI)
-        # Only exclude center area where arrows are drawn (not full width)
-        if 80 <= native_x <= 160:  # Center third of screen
-            if native_y < 48 or native_y > 226:
-                return -1  # In scroll indicator zone, don't detect button
+        # Exclude the scroll-indicator zones (centre column, top and bottom):
+        # visual only, not tappable.
+        if self.SCREEN_WIDTH // 3 <= native_x <= 2 * self.SCREEN_WIDTH // 3:
+            if (native_y < self.CORNER_HIT_SIZE
+                    or native_y > self.UI_HEIGHT - self.SCROLL_INDICATOR_BAND):
+                return -1
 
         for x, y, w, h, index in self.button_rects:
             if x <= native_x <= x + w and y <= native_y <= y + h:
@@ -469,6 +491,94 @@ class TouchButtons(Singleton):
             return ('nav', self._coords_to_nav_key_center_relative(x, y))
         return ('nav', self._coords_to_nav_key(x, y))
 
+    # Outcomes of wait_for_hold()
+    HOLD__COMPLETED = "completed"
+    HOLD__CANCELLED = "cancelled"
+    HOLD__BACK = "back"
+
+    def wait_for_hold(self, button_index: int, duration_ms: int,
+                      on_progress=None, on_cancel=None) -> str:
+        """
+        Block until `button_index` has been held continuously for duration_ms.
+
+        Used for confirming irreversible actions (signing), where a single tap
+        is too easy to trigger by accident. Lives here rather than in the Screen
+        because touch events are only pumped inside this class - there is no
+        background reader - so a Screen polling on its own would never see them.
+
+        on_progress(fraction) is called as the hold advances, so the caller can
+        paint a fill. on_cancel() is called if the finger lifts or slides off
+        early, so the caller can reset and prompt.
+
+        Returns HOLD__COMPLETED, HOLD__CANCELLED (caller decides whether to loop)
+        or HOLD__BACK if the user tapped the back control instead.
+        """
+        rect = None
+        for x, y, w, h, index in self.button_rects:
+            if index == button_index:
+                rect = (x, y, w, h)
+                break
+        if rect is None:
+            logger.warning(f"wait_for_hold: no registered button {button_index}")
+            return self.HOLD__CANCELLED
+
+        def inside(px, py) -> bool:
+            x, y, w, h = rect
+            cx = px // self.PANEL_TO_CANVAS
+            cy = py // self.PANEL_TO_CANVAS
+            return x <= cx <= x + w and y <= cy <= y + h
+
+        hold_start = None
+        last_reported = -1.0
+
+        while True:
+            event = self.touch.poll()
+            if event:
+                event_type, x, y = event
+                if event_type == "down":
+                    self.touch_down = True
+                    self.update_last_input_time()
+                    if inside(x, y):
+                        hold_start = time.time()
+                    else:
+                        hold_start = None
+
+                elif event_type == "move":
+                    # Sliding off the button aborts: the user is backing out.
+                    if hold_start is not None and not inside(x, y):
+                        hold_start = None
+                        last_reported = -1.0
+                        if on_cancel:
+                            on_cancel()
+
+                elif event_type == "up":
+                    self.touch_down = False
+                    self.update_last_input_time()
+                    released_early = hold_start is not None
+                    hold_start = None
+                    last_reported = -1.0
+                    if self._check_back_button_tap(x, y):
+                        return self.HOLD__BACK
+                    if released_early:
+                        if on_cancel:
+                            on_cancel()
+                        return self.HOLD__CANCELLED
+
+            if hold_start is not None:
+                elapsed_ms = (time.time() - hold_start) * 1000.0
+                fraction = min(1.0, elapsed_ms / float(duration_ms))
+                # Only repaint on a visible change; the framebuffer write is
+                # ~85ms on this hardware, so redrawing every poll would starve
+                # the event loop and make the hold feel unresponsive.
+                if on_progress and fraction - last_reported >= 0.05:
+                    last_reported = fraction
+                    on_progress(fraction)
+                if fraction >= 1.0:
+                    return self.HOLD__COMPLETED
+
+            time.sleep(0.02)
+
+
     def wait_for(self, keys=[], check_release=True, release_keys=[], timeout_ms=0, nav_relative_center=False) -> int:
         """
         Wait for touch input matching requested keys.
@@ -537,8 +647,8 @@ class TouchButtons(Singleton):
                     # Store native coords for keyboard/grid tap detection. Skip
                     # only the bar region, and only while a bar is showing.
                     if y < self.TOUCH_BAR_TOP or not self._bar_visible():
-                        self._last_tap_native_x = x // 2
-                        self._last_tap_native_y = y // 2
+                        self._last_tap_native_x = x // self.PANEL_TO_CANVAS
+                        self._last_tap_native_y = y // self.PANEL_TO_CANVAS
 
                     # Check for back button tap (top-left corner)
                     if self._check_back_button_tap(x, y):
@@ -633,8 +743,7 @@ class TouchButtons(Singleton):
                             dy_screen = y - self._drag_last_y
                             if dy_screen:
                                 self.last_input_time = cur_time
-                                # Panel is a 2x upscale of the 240x240 canvas
-                                self._scroll_handler(dy_screen / 2.0)
+                                self._scroll_handler(dy_screen / float(self.PANEL_TO_CANVAS))
                     self._drag_last_y = y
 
                 elif event_type == 'up':

@@ -50,11 +50,11 @@ class E2ERenderer(Renderer):
         cls._instance = renderer
         # Screens resolve the singleton via the base class
         Renderer._instance = renderer
-        renderer.canvas_width = 240
-        renderer.canvas_height = 320          # full-panel native size
-        renderer.canvas = Image.new("RGB", (240, 320))
+        renderer.canvas_width = 480
+        renderer.canvas_height = 640          # rendered at the panel's own size
+        renderer.canvas = Image.new("RGB", (480, 640))
         renderer.draw = ImageDraw.Draw(renderer.canvas)
-        renderer.disp = DPI28Emulator(_width=240, _height=320)
+        renderer.disp = DPI28Emulator(_width=480, _height=640)
         renderer.display_type = "dpi28"
         renderer.frames = 0
 
@@ -97,7 +97,8 @@ def button_center_screen_coords(screen, index):
     btn = screen.buttons[index]
     native_x = getattr(btn, "screen_x", 0) + btn.width // 2
     native_y = btn.screen_y - getattr(btn, "scroll_y", 0) + btn.height // 2
-    return native_x * 2, native_y * 2
+    # Canvas is the panel now, so no conversion.
+    return native_x, native_y
 
 
 def wait_for_render(screen, holder, timeout=5.0):
@@ -356,7 +357,7 @@ def s10():
     expected = screen.possible_words[0]
 
     btn = screen.matches_list_highlight_button
-    tap((btn.screen_x + btn.width // 2) * 2, (btn.screen_y + btn.height // 2) * 2)
+    tap(btn.screen_x + btn.width // 2, btn.screen_y + btn.height // 2)
 
     result = finish(thread, holder)
     assert result == expected, f"expected {expected!r} selected, got {result!r}"
@@ -381,9 +382,66 @@ def s11():
             assert 0 <= key.screen_x and right <= screen.canvas_width, (
                 f"key {key.letter!r} spans {key.screen_x}..{right}, canvas is "
                 f"0..{screen.canvas_width}")
-    # Physical px = native * 2; ~4mm is the Ledger Flex key width.
-    assert kb.key_width * 2 >= 40, f"keys only {kb.key_width * 2}px wide"
-    assert kb.key_height * 2 >= 72, f"keys only {kb.key_height * 2}px tall"
+    # Canvas is the panel, so these are already physical px.
+    # ~4mm is the Ledger Flex key width; its keys are 72px tall.
+    assert kb.key_width >= 40, f"keys only {kb.key_width}px wide"
+    assert kb.key_height >= 72, f"keys only {kb.key_height}px tall"
+
+
+@scenario("hold_to_sign_completes")
+def s12():
+    """Holding the approve button for the full duration signs."""
+    from seedsigner.gui.screens.psbt_screens import PSBTFinalizeScreen
+    from seedsigner.gui.screens.screen import ButtonOption
+
+    screen = PSBTFinalizeScreen(button_data=[ButtonOption("Approve")])
+    # Exercise the mechanism quickly; the real duration is asserted separately.
+    screen.HOLD_TO_SIGN_MS = 400
+    thread, holder = run_screen_async(screen)
+    wait_for_render(screen, holder)
+
+    touch = TouchButtons.get_instance().touch
+    x, y = button_center_screen_coords(screen, 0)
+    touch.inject_event("down", x, y)
+    time.sleep(0.9)                      # comfortably past 400ms
+    touch.inject_event("up", x, y)
+    assert finish(thread, holder) == 0
+
+
+@scenario("hold_to_sign_early_release_does_not_sign")
+def s13():
+    """Releasing early must NOT sign; a later full hold still does."""
+    from seedsigner.gui.screens.psbt_screens import PSBTFinalizeScreen
+    from seedsigner.gui.screens.screen import ButtonOption
+
+    screen = PSBTFinalizeScreen(button_data=[ButtonOption("Approve")])
+    screen.HOLD_TO_SIGN_MS = 800
+    thread, holder = run_screen_async(screen)
+    wait_for_render(screen, holder)
+
+    touch = TouchButtons.get_instance().touch
+    x, y = button_center_screen_coords(screen, 0)
+
+    touch.inject_event("down", x, y)
+    time.sleep(0.2)                      # well short of 800ms
+    touch.inject_event("up", x, y)
+    time.sleep(0.4)
+    assert "result" not in holder, (
+        f"early release signed the transaction: {holder.get('result')!r}")
+
+    # The screen must still be usable: a full hold now signs.
+    touch.inject_event("down", x, y)
+    time.sleep(1.3)
+    touch.inject_event("up", x, y)
+    assert finish(thread, holder) == 0
+
+
+@scenario("hold_to_sign_duration_is_deliberate")
+def s14():
+    """The shipped hold duration must stay long enough to be intentional."""
+    from seedsigner.gui.screens.psbt_screens import PSBTFinalizeScreen
+    assert PSBTFinalizeScreen.HOLD_TO_SIGN_MS >= 2000, (
+        f"hold is only {PSBTFinalizeScreen.HOLD_TO_SIGN_MS}ms")
 
 
 def wait_for_render_keyboard(screen, holder, timeout=5.0):
@@ -412,7 +470,7 @@ def tap_key(screen, key):
     kb = screen.keyboard
     x = key.screen_x + (kb.key_width * key.size) // 2
     y = key.screen_y + kb.key_height // 2
-    tap(x * 2, y * 2)
+    tap(x, y)
 
 
 def main():
@@ -425,7 +483,7 @@ def main():
     E2ERenderer.configure_instance()
 
     with patch("seedsigner.controller.Controller.get_instance", return_value=controller):
-        for fn in (s1, s2, s3, s4, s5, s6, s7, s8, s9, s10, s11):
+        for fn in (s1, s2, s3, s4, s5, s6, s7, s8, s9, s10, s11, s12, s13, s14):
             fn()
 
     print(f"\n{len(PASSED)} passed, {len(FAILED)} failed")

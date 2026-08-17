@@ -107,7 +107,7 @@ class Renderer(ConfigurableSingleton):
             # Check for auto-detected display first
             env_display = os.environ.get("SEEDSIGNER_DISPLAY")
             if env_display == "dpi28":
-                display_config = "dpi28_240x320"
+                display_config = "dpi28_480x640"
                 logger.info("Using auto-detected DPI28 display")
             else:
                 display_config = Settings.get_instance().get_value(SettingsConstants.SETTING__DISPLAY_CONFIGURATION, default_if_none=True)
