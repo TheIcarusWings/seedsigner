@@ -148,7 +148,12 @@ def _scaled(sizes: dict) -> dict:
 
 
 class GUIConstants:
-    EDGE_PADDING = 8 * SCALE
+    # Side margins. The Ledger Flex uses 32px on a near-identical panel against
+    # our previous 16; 24px is the chosen compromise, buying noticeably more
+    # breathing room on every list screen while costing only 8px of row width
+    # (which matters for long labels like seed words and addresses).
+    # Non-touch keeps upstream's 8 untouched.
+    EDGE_PADDING = (12 if is_touch_ui() else 8) * SCALE
     COMPONENT_PADDING = 8 * SCALE
     LIST_ITEM_PADDING = 4 * SCALE
 
