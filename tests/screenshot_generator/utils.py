@@ -32,10 +32,11 @@ class ScreenshotRenderer(Renderer):
         renderer = cls.__new__(cls)
         cls._instance = renderer
 
-        # DPI28 touch mode renders at the panel's native 240x320; the ST7789
+        # DPI28 touch mode renders at the panel's own 480x640; the ST7789
         # baseline stays 240x240.
-        renderer.canvas_width = 240
-        renderer.canvas_height = 320 if os.environ.get('SEEDSIGNER_SCREENSHOT_DPI28') == '1' else 240
+        _dpi28 = os.environ.get('SEEDSIGNER_SCREENSHOT_DPI28') == '1'
+        renderer.canvas_width = 480 if _dpi28 else 240
+        renderer.canvas_height = 640 if _dpi28 else 240
 
         renderer.canvas = Image.new('RGB', (renderer.canvas_width, renderer.canvas_height))
         renderer.draw = ImageDraw.Draw(renderer.canvas)
@@ -43,14 +44,14 @@ class ScreenshotRenderer(Renderer):
         renderer.render_count = 0
 
         # DPI28 touchscreen mode: also emit the composed 480x640 physical-panel
-        # frame (2x-scaled UI + touch bar) alongside each 240x240 screenshot.
+        # frame (native-resolution UI + touch bar) alongside each screenshot.
         # Screens set their touch-bar preset via BaseScreen._set_touch_bar(),
         # which reaches this driver through renderer.disp; SEEDSIGNER_TOUCH=1
         # must also be set for those calls to fire.
         renderer.dpi28_disp = None
         if os.environ.get('SEEDSIGNER_SCREENSHOT_DPI28') == '1':
             from seedsigner.hardware.DPI28 import DPI28Emulator
-            renderer.disp = DPI28Emulator(_width=240, _height=320)
+            renderer.disp = DPI28Emulator(_width=480, _height=640)
             renderer.dpi28_disp = renderer.disp
             renderer.display_type = "dpi28"
 

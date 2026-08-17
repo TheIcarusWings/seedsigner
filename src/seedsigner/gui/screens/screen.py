@@ -9,7 +9,7 @@ from PIL import Image, ImageDraw, ImageColor
 from typing import Any, List, Tuple
 
 from seedsigner.helpers.l10n import mark_for_translation as _mft
-from seedsigner.gui.components import (GUIConstants, is_touch_ui,
+from seedsigner.gui.components import (SCALE, GUIConstants, is_touch_ui,
     BaseComponent, Button, Icon, IconButton, LargeIconButton,
     SeedSignerIconConstants, TopNav, TextArea, load_image)
 from seedsigner.gui.keyboard import Keyboard, TextEntryDisplay
@@ -71,8 +71,8 @@ class BaseScreen(BaseComponent):
         self.scroll_y = 0
 
 
-    # Native-pixel height of the control bar overlay (160 panel px / 2).
-    TOUCH_BAR_NATIVE_HEIGHT = 80
+    # Height of the control bar overlay, in canvas px (160 on the panel).
+    TOUCH_BAR_NATIVE_HEIGHT = 80 * SCALE
 
     # Screens that display a control bar AND lay out content underneath it
     # must reserve that space, because the bar is now an overlay on a
@@ -106,8 +106,8 @@ class BaseScreen(BaseComponent):
     # controls. Full-bleed screens (camera, QR) have no list to tap and no top
     # nav, so the actions that used to live on the control bar are drawn into
     # the canvas itself and registered as tap targets.
-    TOUCH_CONTROL_HEIGHT = 44
-    TOUCH_CONTROL_GAP = 8
+    TOUCH_CONTROL_HEIGHT = 44 * SCALE
+    TOUCH_CONTROL_GAP = 8 * SCALE
 
     def _make_touch_controls(self, specs: list, y: int = None) -> list:
         """
@@ -471,8 +471,8 @@ class ButtonListScreen(BaseTopNavScreen):
 
     # Touch-mode row height and its matching corner radius (radius scales with
     # height or a taller row reads as a harsher rectangle).
-    TOUCH_BUTTON_HEIGHT = 44
-    TOUCH_BUTTON_RADIUS = 11
+    TOUCH_BUTTON_HEIGHT = 44 * SCALE
+    TOUCH_BUTTON_RADIUS = 11 * SCALE
 
     # Touch: render this list as full-height stacked tiles that fill the
     # screen, instead of small rows. For short menus (2-3 options) with no
