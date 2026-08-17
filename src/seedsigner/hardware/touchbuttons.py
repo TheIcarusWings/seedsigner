@@ -491,6 +491,94 @@ class TouchButtons(Singleton):
             return ('nav', self._coords_to_nav_key_center_relative(x, y))
         return ('nav', self._coords_to_nav_key(x, y))
 
+    # Outcomes of wait_for_hold()
+    HOLD__COMPLETED = "completed"
+    HOLD__CANCELLED = "cancelled"
+    HOLD__BACK = "back"
+
+    def wait_for_hold(self, button_index: int, duration_ms: int,
+                      on_progress=None, on_cancel=None) -> str:
+        """
+        Block until `button_index` has been held continuously for duration_ms.
+
+        Used for confirming irreversible actions (signing), where a single tap
+        is too easy to trigger by accident. Lives here rather than in the Screen
+        because touch events are only pumped inside this class - there is no
+        background reader - so a Screen polling on its own would never see them.
+
+        on_progress(fraction) is called as the hold advances, so the caller can
+        paint a fill. on_cancel() is called if the finger lifts or slides off
+        early, so the caller can reset and prompt.
+
+        Returns HOLD__COMPLETED, HOLD__CANCELLED (caller decides whether to loop)
+        or HOLD__BACK if the user tapped the back control instead.
+        """
+        rect = None
+        for x, y, w, h, index in self.button_rects:
+            if index == button_index:
+                rect = (x, y, w, h)
+                break
+        if rect is None:
+            logger.warning(f"wait_for_hold: no registered button {button_index}")
+            return self.HOLD__CANCELLED
+
+        def inside(px, py) -> bool:
+            x, y, w, h = rect
+            cx = px // self.PANEL_TO_CANVAS
+            cy = py // self.PANEL_TO_CANVAS
+            return x <= cx <= x + w and y <= cy <= y + h
+
+        hold_start = None
+        last_reported = -1.0
+
+        while True:
+            event = self.touch.poll()
+            if event:
+                event_type, x, y = event
+                if event_type == "down":
+                    self.touch_down = True
+                    self.update_last_input_time()
+                    if inside(x, y):
+                        hold_start = time.time()
+                    else:
+                        hold_start = None
+
+                elif event_type == "move":
+                    # Sliding off the button aborts: the user is backing out.
+                    if hold_start is not None and not inside(x, y):
+                        hold_start = None
+                        last_reported = -1.0
+                        if on_cancel:
+                            on_cancel()
+
+                elif event_type == "up":
+                    self.touch_down = False
+                    self.update_last_input_time()
+                    released_early = hold_start is not None
+                    hold_start = None
+                    last_reported = -1.0
+                    if self._check_back_button_tap(x, y):
+                        return self.HOLD__BACK
+                    if released_early:
+                        if on_cancel:
+                            on_cancel()
+                        return self.HOLD__CANCELLED
+
+            if hold_start is not None:
+                elapsed_ms = (time.time() - hold_start) * 1000.0
+                fraction = min(1.0, elapsed_ms / float(duration_ms))
+                # Only repaint on a visible change; the framebuffer write is
+                # ~85ms on this hardware, so redrawing every poll would starve
+                # the event loop and make the hold feel unresponsive.
+                if on_progress and fraction - last_reported >= 0.05:
+                    last_reported = fraction
+                    on_progress(fraction)
+                if fraction >= 1.0:
+                    return self.HOLD__COMPLETED
+
+            time.sleep(0.02)
+
+
     def wait_for(self, keys=[], check_release=True, release_keys=[], timeout_ms=0, nav_relative_center=False) -> int:
         """
         Wait for touch input matching requested keys.
