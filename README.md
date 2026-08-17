@@ -358,3 +358,14 @@ See the [SeedSigner OS repo](https://github.com/SeedSigner/seedsigner-os/) for i
 
 # Developer Local Build Instructions
 Raspberry Pi OS is commonly used for development. See the [Raspberry Pi OS Build Instructions](docs/raspberry_pi_os_build_instructions.md)
+
+## Attribution
+
+The touchscreen foundation of this branch (DPI28 display driver, touch
+input layer, touch button handling, and the Waveshare 2.8" DPI bring-up)
+is the published work of
+[FreeOnlineUser/seedsigner](https://github.com/FreeOnlineUser/seedsigner),
+public since December 2025 and demonstrated in
+[SeedSigner#150](https://github.com/SeedSigner/seedsigner/issues/150)
+on 2026-01-03. The UI rework, icons, QWERTY entry and tests layered on
+top are the work of this fork.

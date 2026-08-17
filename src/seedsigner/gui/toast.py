@@ -104,7 +104,6 @@ class BaseToastOverlayManagerThread(BaseThread):
                  ):
         from seedsigner.controller import Controller
         from seedsigner.gui.renderer import Renderer
-        from seedsigner.hardware.buttons import HardwareButtons
         super().__init__()
         self.activation_delay: int = activation_delay
         self.duration: int = duration
@@ -112,7 +111,10 @@ class BaseToastOverlayManagerThread(BaseThread):
 
         self.renderer = Renderer.get_instance()
         self.controller = Controller.get_instance()
-        self.hw_inputs = HardwareButtons.get_instance()
+
+        # Get input handler (touch or hardware buttons)
+        from seedsigner.hardware.touchbuttons import get_buttons
+        self.hw_inputs = get_buttons()
 
         # Special case when screensaver is running
         self.hw_inputs.override_ind = True

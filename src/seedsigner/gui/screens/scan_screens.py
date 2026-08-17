@@ -1,3 +1,4 @@
+import os
 import time
 
 from dataclasses import dataclass
@@ -5,7 +6,7 @@ from gettext import gettext as _
 from PIL import Image, ImageDraw
 
 from seedsigner.gui import renderer
-from seedsigner.gui.components import GUIConstants, Fonts, resize_image_to_fill
+from seedsigner.gui.components import is_touch_ui, SeedSignerIconConstants, GUIConstants, Fonts, resize_image_to_fill
 from seedsigner.models.decode_qr import DecodeQR
 from seedsigner.models.threads import BaseThread, ThreadsafeCounter
 
@@ -55,8 +56,15 @@ class ScanScreen(BaseScreen):
         # Initialize the base class
         super().__post_init__()
 
-        # TODO: Arrange this with UI elements rather than text
-        self.instructions_text = "< " + _("back") + "  |  " + _(self.instructions_text)
+        # Touch draws its own back control onto the frame (see LivePreviewThread),
+        # so there is no control bar and no "< back" text prefix.
+        self._set_touch_bar('TOUCH_BAR_HIDDEN')
+
+        if is_touch_ui():
+            self.instructions_text = _(self.instructions_text)
+        else:
+            # TODO: Arrange this with UI elements rather than text
+            self.instructions_text = "< " + _("back") + "  |  " + _(self.instructions_text)
 
         self.camera = Camera.get_instance()
         self.camera.start_video_stream_mode(resolution=self.resolution, framerate=self.framerate, format="rgb")
@@ -92,8 +100,32 @@ class ScanScreen(BaseScreen):
             super().__init__()
 
 
+        # Touch: geometry of the on-frame back control. It sits inside the
+        # top-left region the input layer already treats as Back, so drawing it
+        # is all that is needed - no extra hit testing.
+        BACK_CHIP_RECT = (8, 8, 48, 48)
+
+        def _draw_back_chip(self, frame, icon_font):
+            draw = ImageDraw.Draw(frame)
+            draw.rounded_rectangle(
+                self.BACK_CHIP_RECT,
+                radius=8,
+                fill=GUIConstants.BACKGROUND_COLOR,
+                outline=GUIConstants.ACCENT_COLOR,
+                width=2,
+            )
+            x0, y0, x1, y1 = self.BACK_CHIP_RECT
+            draw.text(
+                (int((x0 + x1)/2), int((y0 + y1)/2)),
+                SeedSignerIconConstants.CHEVRON_LEFT,
+                font=icon_font,
+                fill=GUIConstants.ACCENT_COLOR,
+                anchor="mm",
+            )
+
         def run(self):
             instructions_font = Fonts.get_font(GUIConstants.get_body_font_name(), GUIConstants.get_button_font_size())
+            icon_font = Fonts.get_font(GUIConstants.ICON_FONT_NAME__SEEDSIGNER, 24)
 
             # pre-calculate how big the animated QR percent display can be
             (left, top, right, bottom) = instructions_font.getbbox("100%")
@@ -216,6 +248,9 @@ class ScanScreen(BaseScreen):
                                     width=1,
                                 )
 
+                        if is_touch_ui():
+                            self._draw_back_chip(frame, icon_font)
+
                         self.renderer.show_image(frame, show_direct=True)
 
                 if self.camera._video_stream is None:
@@ -260,7 +295,12 @@ class ScanScreen(BaseScreen):
                         # We received a valid frame, but we've already seen in
                         self.frames_decode_status.set_value(self.FRAME__REPEATED_PART)
                 
-                if self.hw_inputs.check_for_low(HardwareButtonsConstants.KEY_RIGHT) or self.hw_inputs.check_for_low(HardwareButtonsConstants.KEY_LEFT):
+                exit_pressed = self.hw_inputs.check_for_low(HardwareButtonsConstants.KEY_RIGHT) or self.hw_inputs.check_for_low(HardwareButtonsConstants.KEY_LEFT) or self.hw_inputs.check_for_low(HardwareButtonsConstants.KEY1)
+                if not exit_pressed and os.environ.get('SEEDSIGNER_TOUCH') == '1':
+                    # Touch: a tap anywhere still cancels the scan (check_for_low is
+                    # key-aware now, so the plain-tap case must be requested explicitly)
+                    exit_pressed = self.hw_inputs.check_for_low(keys=HardwareButtonsConstants.KEYS__ANYCLICK)
+                if exit_pressed:
                     self.camera.stop_video_stream_mode()
                     return False
 

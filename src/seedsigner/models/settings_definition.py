@@ -307,6 +307,21 @@ class SettingsConstants:
         (MICROSD_TOAST_TIMER_FOREVER, _mft("Until SD removed"))
     ]
 
+    KEYBOARD_MODE__STANDARD = "std"
+    KEYBOARD_MODE__T9 = "t9"
+    KEYBOARD_MODE__T9_PREDICT = "t9p"
+    KEYBOARD_MODE__QWERTY = "qwerty"
+    ALL_KEYBOARD_MODES = [
+        (KEYBOARD_MODE__STANDARD, _mft("Standard")),
+        (KEYBOARD_MODE__T9, _mft("T9")),
+        (KEYBOARD_MODE__T9_PREDICT, _mft("T9 predict")),
+    ]
+    if os.environ.get('SEEDSIGNER_TOUCH') == '1':
+        # Tapping a 10-across QWERTY needs a touchscreen, so a hardware-button
+        # build is not offered a mode it cannot drive (and its settings screens
+        # stay identical to upstream).
+        ALL_KEYBOARD_MODES.insert(1, (KEYBOARD_MODE__QWERTY, _mft("QWERTY")))
+
     WORDLIST_LANGUAGE__ENGLISH = "en"
     WORDLIST_LANGUAGE__CHINESE_SIMPLIFIED = "zh_Hans_CN"
     WORDLIST_LANGUAGE__CHINESE_TRADITIONAL = "zh_Hant_TW"
@@ -353,6 +368,7 @@ class SettingsConstants:
     SETTING__QR_BRIGHTNESS_TIPS = "qr_brightness_tips"
     SETTING__PARTNER_LOGOS = "partner_logos"
     SETTING__MICROSD_TOAST_TIMER = "microsd_toast_timer"
+    SETTING__KEYBOARD_MODE = "keyboard_mode"
 
     SETTING__DEBUG = "debug"
 
@@ -362,11 +378,13 @@ class SettingsConstants:
     DISPLAY_CONFIGURATION__ST7789__320x240 = "st7789_320x240"    # natively portrait dimensions; we apply a 90° rotation
     DISPLAY_CONFIGURATION__ILI9341__320x240 = "ili9341_320x240"  # natively portrait dimensions; we apply a 90° rotation
     DISPLAY_CONFIGURATION__ILI9486__480x320 = "ili9486_480x320"  # natively portrait dimensions; we apply a 90° rotation
+    DISPLAY_CONFIGURATION__DPI28__240x320 = "dpi28_240x320"  # Waveshare 2.8" DPI touchscreen (480x640 physical, 240x320 native, 2x upscale fills the panel)
     ALL_DISPLAY_CONFIGURATIONS = [
         (DISPLAY_CONFIGURATION__ST7789__240x240, "st7789 240x240"),
         (DISPLAY_CONFIGURATION__ST7789__320x240, "st7789 320x240"),
         (DISPLAY_CONFIGURATION__ILI9341__320x240, "ili9341 320x240 (beta)"),
         # (DISPLAY_CONFIGURATION__ILI9486__320x480, "ili9486 480x320"),  # TODO: Enable when ili9486 driver performance is improved
+        (DISPLAY_CONFIGURATION__DPI28__240x320, "dpi28 240x320 touch"),
     ]
 
 
@@ -684,6 +702,15 @@ class SettingsDefinition:
                       default_value=SettingsConstants.MICROSD_TOAST_TIMER_FIVE_SECONDS),
 
         SettingsEntry(category=SettingsConstants.CATEGORY__FEATURES,
+                      attr_name=SettingsConstants.SETTING__KEYBOARD_MODE,
+                      abbreviated_name="kbd_mode",
+                      display_name=_mft("Seed keyboard"),
+                      type=SettingsConstants.TYPE__SELECT_1,
+                      visibility=SettingsConstants.VISIBILITY__ADVANCED,
+                      selection_options=SettingsConstants.ALL_KEYBOARD_MODES,
+                      default_value=SettingsConstants.KEYBOARD_MODE__STANDARD),
+
+        SettingsEntry(category=SettingsConstants.CATEGORY__FEATURES,
                       attr_name=SettingsConstants.SETTING__MESSAGE_SIGNING,
                       display_name=_mft("Message signing"),
                       visibility=SettingsConstants.VISIBILITY__ADVANCED,
@@ -800,6 +827,23 @@ class SettingsDefinition:
                 as_dict[attr_name] = list(entry.default_value)
             else:
                 as_dict[attr_name] = entry.default_value
+
+        # Adjust defaults for touchscreen mode
+        if os.environ.get('SEEDSIGNER_TOUCH') == '1':
+            entry = cls.get_settings_entry(SettingsConstants.SETTING__CAMERA_ROTATION)
+            key = entry.abbreviated_name if use_abbreviated_name else entry.attr_name
+            if key in as_dict:
+                as_dict[key] = SettingsConstants.CAMERA_ROTATION__90
+
+            # QWERTY is the touch-native way to enter seed words: 10 keys across
+            # 480 physical px is ~4mm each, the same key size the Ledger Flex
+            # ships on a 480x600 panel. Hardware-button builds keep the upstream
+            # standard keyboard so their behavior is unchanged.
+            entry = cls.get_settings_entry(SettingsConstants.SETTING__KEYBOARD_MODE)
+            key = entry.abbreviated_name if use_abbreviated_name else entry.attr_name
+            if key in as_dict:
+                as_dict[key] = SettingsConstants.KEYBOARD_MODE__QWERTY
+
         return as_dict
 
 

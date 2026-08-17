@@ -64,18 +64,30 @@ class HardwareButtons(Singleton):
         return cls._instance
 
 
-    def wait_for(self, keys=[]) -> int:
+    def wait_for(self, keys=[], timeout_ms=0, check_release=True, release_keys=None, nav_relative_center=False) -> int:
         """
         Block execution until one of the target keys is pressed.
 
         Optionally override the wait by calling `trigger_override()`.
+
+        Args:
+            keys: List of key codes to listen for
+            timeout_ms: If > 0, return None after this many milliseconds with no input
+            check_release / release_keys / nav_relative_center: accepted for
+                interface compatibility with TouchButtons.wait_for() and
+                ignored here — GPIO debounce/repeat handling below is
+                unchanged from upstream.
         """
         # TODO: Refactor to keep control in the Controller and not here
         from seedsigner.controller import Controller
         controller = Controller.get_instance()
         self.override_ind = False
+        wait_start = int(time.time() * 1000) if timeout_ms > 0 else 0
 
         while True:
+            if timeout_ms > 0 and int(time.time() * 1000) - wait_start >= timeout_ms:
+                return None
+
             if self.override_ind:
                 # Break out of the wait_for without waiting for user input
                 self.override_ind = False

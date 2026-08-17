@@ -1,4 +1,5 @@
 import logging
+import os
 import random
 import time
 
@@ -7,7 +8,7 @@ from gettext import gettext as _
 
 from embit.descriptor import Descriptor
 
-from seedsigner.gui.components import FontAwesomeIconConstants, SeedSignerIconConstants
+from seedsigner.gui.components import is_touch_ui, FontAwesomeIconConstants, SeedSignerIconConstants
 from seedsigner.gui.screens import (RET_CODE__BACK_BUTTON, ButtonListScreen,
     WarningScreen, DireWarningScreen, seed_screens)
 from seedsigner.gui.screens.screen import ButtonOption, ButtonOptionWithoutTranslation
@@ -218,12 +219,28 @@ class SeedMnemonicEntryView(View):
 
 
     def run(self):
+        # Choose screen class based on keyboard mode setting
+        keyboard_mode = self.settings.get_value(SettingsConstants.SETTING__KEYBOARD_MODE)
+        extra_kwargs = {}
+        if keyboard_mode in (SettingsConstants.KEYBOARD_MODE__T9, SettingsConstants.KEYBOARD_MODE__T9_PREDICT):
+            screen_class = seed_screens.SeedMnemonicEntryT9Screen
+            default_initial = [" "]  # T9 starts empty
+            extra_kwargs["predictive"] = keyboard_mode == SettingsConstants.KEYBOARD_MODE__T9_PREDICT
+        elif keyboard_mode == SettingsConstants.KEYBOARD_MODE__QWERTY and is_touch_ui():
+            # Turns the panel sideways so a full QWERTY keyboard fits.
+            screen_class = seed_screens.SeedMnemonicEntryQwertyScreen
+            default_initial = [" "]
+        else:
+            screen_class = seed_screens.SeedMnemonicEntryScreen
+            default_initial = ["a"]
+
         ret = self.run_screen(
-            seed_screens.SeedMnemonicEntryScreen,
+            screen_class,
             # TRANSLATOR_NOTE: Inserts the word number (e.g. "Seed Word #6")
             title=_("Seed Word #{}").format(self.cur_word_index + 1),  # Human-readable 1-indexing!
-            initial_letters=list(self.cur_word) if self.cur_word else ["a"],
+            initial_letters=list(self.cur_word) if self.cur_word else default_initial,
             wordlist=Seed.get_wordlist(wordlist_language_code=self.settings.get_value(SettingsConstants.SETTING__WORDLIST_LANGUAGE)),
+            **extra_kwargs,
         )
 
         if ret == RET_CODE__BACK_BUTTON:
@@ -645,6 +662,7 @@ class SeedBackupView(View):
             title=_("Backup Seed"),
             button_data=button_data,
             is_bottom_list=True,
+            touch_fill_tiles=True,
         )
 
         if selected_menu_num == RET_CODE__BACK_BUTTON:
@@ -826,6 +844,7 @@ class SeedExportXpubQRFormatView(View):
             is_button_text_centered=False,
             button_data=button_data,
             is_bottom_list=True,
+            touch_fill_tiles=True,
         )
 
         if selected_menu_num == RET_CODE__BACK_BUTTON:
@@ -1293,7 +1312,10 @@ class SeedWordsBackupTestView(View):
         selected_menu_num = self.run_screen(
             ButtonListScreen,
             title=title,
-            show_back_button=False,
+            # Touch builds need an on-screen way to leave the backup test
+            # (there are no hardware buttons); GPIO builds keep upstream's
+            # no-back behavior.
+            show_back_button=os.environ.get('SEEDSIGNER_TOUCH') == '1',
             button_data=button_data,
             is_bottom_list=True,
             is_button_text_centered=True,
@@ -1301,6 +1323,12 @@ class SeedWordsBackupTestView(View):
 
         if self.is_pending_seed:
             self.seed = None # Set to None for next View to know it's a pending seed
+
+        if selected_menu_num == RET_CODE__BACK_BUTTON:
+            return Destination(
+                SeedWordsBackupTestPromptView,
+                view_args=dict(seed=self.seed, bip85_data=self.bip85_data),
+            )
 
         if button_data[selected_menu_num] == real_word:
             self.confirmed_list.append(self.cur_index)

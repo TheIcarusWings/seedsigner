@@ -4,8 +4,9 @@ from dataclasses import dataclass
 DISPLAY_TYPE__ST7789 = "st7789"
 DISPLAY_TYPE__ILI9341 = "ili9341"
 DISPLAY_TYPE__ILI9486 = "ili9486"
+DISPLAY_TYPE__DPI28 = "dpi28"
 
-ALL_DISPLAY_TYPES = [DISPLAY_TYPE__ST7789, DISPLAY_TYPE__ILI9341, DISPLAY_TYPE__ILI9486]
+ALL_DISPLAY_TYPES = [DISPLAY_TYPE__ST7789, DISPLAY_TYPE__ILI9341, DISPLAY_TYPE__ILI9486, DISPLAY_TYPE__DPI28]
 
     
 
@@ -90,3 +91,9 @@ class DisplayDriverFactory:
         elif display_type == DISPLAY_TYPE__ILI9486:
             # TODO: improve performance of ili9486 driver
             raise Exception("ILI9486 display not implemented yet")
+
+        elif display_type == DISPLAY_TYPE__DPI28:
+            from seedsigner.hardware.DPI28 import DPI28
+            # The driver renders the native UI 2x-upscaled onto the 480x640
+            # panel and reports the native size to the Renderer.
+            return DPI28(_width=DPI28.NATIVE_WIDTH, _height=DPI28.NATIVE_HEIGHT)

@@ -1,0 +1,189 @@
+{
+  "source": "https://feathericons.com",
+  "license": "MIT",
+  "version": "4.29.2",
+  "raster_size": 128,
+  "stroke_width": 2.25,
+  "icons": {
+    "SCAN": {
+      "feather": "maximize+grid",
+      "composite": {
+        "base": "maximize",
+        "inner": "grid",
+        "inner_scale": 0.44
+      },
+      "svg_sha256": "d072a129844b3ffd6dd1bdf03ff6c8c241fe1cdcddab0b45a0f5e9ebb9e6aef9",
+      "png_sha256": "c0443f6dc37f62cb03a85cc020c06f2848dbc3b266d90978c24ffa560e613ded"
+    },
+    "BACK": {
+      "feather": "arrow-left",
+      "svg_sha256": "0f365f8529b575e3ba9b073e9010af028291cf5d509c49685ea2c57ac872f6a8",
+      "png_sha256": "5de4d0d7c2a2c233f46772659ccd079ab11445e08a6ef89fd5ac13e89f7ff85b"
+    },
+    "CHANGE": {
+      "feather": "shuffle",
+      "svg_sha256": "73b69f6c55b407be1bed610683d442554f6e272309622d2525c23df18175e2c1",
+      "png_sha256": "b77aa17123ff21eea36f8e3fb43981c3a05ba7bc6b7b344658cf7defe49cc623"
+    },
+    "CHECK": {
+      "feather": "check",
+      "svg_sha256": "2365fb3bc9fa566945a647f69580bd92d7fd25920b0e14114d8593edff66363a",
+      "png_sha256": "beec72e14cd099f427413b873edb6aa8c9bf414c6565158236527f8871b824d9"
+    },
+    "CHECKBOX": {
+      "feather": "square",
+      "svg_sha256": "e8138829f3a95838aff4dba040cdc951997963e73ef9182f75e0a2df79ebd819",
+      "png_sha256": "a3bc543be543988c1b9d26f63a5b415531ca36f8d2eeb1e9d4fb2f41e153f76f"
+    },
+    "CHECKBOX_SELECTED": {
+      "feather": "check-square",
+      "svg_sha256": "cd01219f58275ce837cd7a7d4dda08556a42a1a0a04e20c36696c37ebbeb8e2a",
+      "png_sha256": "5aeff9ea431894067ec6298a26b535b50e3782efe2729e9e389e22f23e30ac4e"
+    },
+    "CHEVRON_DOWN": {
+      "feather": "chevron-down",
+      "svg_sha256": "152ec8d72f48d669ce1d71b0f0a1e78d3c24346a2c5240a8761945841b94dc15",
+      "png_sha256": "a9566adcadcb27cd1a7ca9ef5ff542bade7547898f1ff666162d5a3aa656b775"
+    },
+    "CHEVRON_LEFT": {
+      "feather": "chevron-left",
+      "svg_sha256": "35728fc982141aa8d017eb1d59f90f989e56467bc5b960525e5820eda39f640c",
+      "png_sha256": "0e7cb8bf46e8e153fcf88d9b055aa52ee160f76257cf4ee1a403f082d71c4ed4"
+    },
+    "CHEVRON_RIGHT": {
+      "feather": "chevron-right",
+      "svg_sha256": "80459c677f0bbf72b394c9985b2be27266bb561c4a610f5408e7aaa1492effc1",
+      "png_sha256": "828a5faf24b3f3ee9aac26c6bb4064bb9530494d9e2e1f165088e318e7be311e"
+    },
+    "CHEVRON_UP": {
+      "feather": "chevron-up",
+      "svg_sha256": "dabdada1c7093baf247d4003dc37bdeccf42a843e5a5ab04cd8c5efe1d42e314",
+      "png_sha256": "ad5dd9ae18dde76c57afc43836fe1cf9ed5dbeeb0e0a38eea82c7054a56b30b0"
+    },
+    "DELETE": {
+      "feather": "delete",
+      "svg_sha256": "c6cef90ec2be990793c6f9ecca76b1923668cbb6ffc033820fc79067ae6ab00b",
+      "png_sha256": "698814c2bdd6f805847d7eef1befbb7430ac4a9586b31a7d188812c7da1056ff"
+    },
+    "DERIVATION": {
+      "feather": "git-branch",
+      "svg_sha256": "94315af4eefabb8a004a875ab206f2b870ef467b7aff2b214f0763322a7db5c3",
+      "png_sha256": "830723666ea0e324c4dade923d7ed9517527c74523658c15614a28f6be4c922c"
+    },
+    "ERROR": {
+      "feather": "x-circle",
+      "svg_sha256": "755c1efaa727fd5ed5acbf540c89beb5093d11552457e718e9d55ca131a83ef3",
+      "png_sha256": "9e90c7c714a41879659698a1e3de70756bba3595cc49214c4a281967db8e40a5"
+    },
+    "FA_ANGLE_DOWN": {
+      "feather": "chevron-down",
+      "svg_sha256": "152ec8d72f48d669ce1d71b0f0a1e78d3c24346a2c5240a8761945841b94dc15",
+      "png_sha256": "a9566adcadcb27cd1a7ca9ef5ff542bade7547898f1ff666162d5a3aa656b775"
+    },
+    "FA_ANGLE_UP": {
+      "feather": "chevron-up",
+      "svg_sha256": "dabdada1c7093baf247d4003dc37bdeccf42a843e5a5ab04cd8c5efe1d42e314",
+      "png_sha256": "ad5dd9ae18dde76c57afc43836fe1cf9ed5dbeeb0e0a38eea82c7054a56b30b0"
+    },
+    "FA_CAMERA": {
+      "feather": "camera",
+      "svg_sha256": "49a21133705ca3782548ee8d23edcd71b94364ee6e4241de8422d7ca80d49a42",
+      "png_sha256": "319a106133e2c7cf1910b7d3ce5df466875e54437ec4d61407d90d9f1d6f1a2e"
+    },
+    "FA_CIRCLE": {
+      "feather": "circle",
+      "svg_sha256": "0d2024cc6f6c9b76b5ce28488efc50f8b4272f7590b0efe762232038051191a5",
+      "png_sha256": "a6fe1c70b5fe22d578c1b3afcd9a3305263d6c7323cc9865faab66437a045be1"
+    },
+    "FA_KEYBOARD": {
+      "feather": "type",
+      "svg_sha256": "30bef5b1801ab382de902cbb1ce791c4743337f91b9a41c1e7dc1907c7bec361",
+      "png_sha256": "d4089119aabf6d416271cf97651c7a247595430ff27be6f9543e6728036107d1"
+    },
+    "FA_MAP": {
+      "feather": "map",
+      "svg_sha256": "e97e3b4f5519a4218138ba6ddda75cf4e20abce74fbeeeb5c161cb4c8fb29ed0",
+      "png_sha256": "be71a4148d68b3911ef4d57e92e764b6ad8b1d7fb173b8bc032d39fe2d134051"
+    },
+    "FA_X": {
+      "feather": "x",
+      "svg_sha256": "891da901166c26a96c1bdc1d9be6415a856a722156fc548672629d564b549941",
+      "png_sha256": "63a2c45d1ec0c25c0dfce7d0e222793e7e6bfd6fedf8919f7c7cbf9eda710f2f"
+    },
+    "FINGERPRINT": {
+      "feather": "hash",
+      "svg_sha256": "b18ab4600452c3a4e71df174e470becf6fe6b2ccdd88f94dcee3e31fd5f806c1",
+      "png_sha256": "d2845970637f27bf8f0fdd1d836607a2821c4bbb2d238d06c32876a5b8a5e999"
+    },
+    "INFO": {
+      "feather": "info",
+      "svg_sha256": "f49e14b5230773a871e3e945cc092ec4f33649e51345f0ccba5501128d1f77be",
+      "png_sha256": "9615c36eb8b748008bb79a3845cddd2327ef0d6c99a13e7d641324e790bf3a57"
+    },
+    "MICROSD": {
+      "feather": "hard-drive",
+      "svg_sha256": "fe462844c4397da4d186e02138a52b0e45849aca29658f1ff2ed81f53e279b07",
+      "png_sha256": "d7158872052cbf73c86b8972d3a637f526908cd43bf51a4c2d37f78d630370d3"
+    },
+    "PASSPHRASE": {
+      "feather": "lock",
+      "svg_sha256": "4d3c4db36888bbe68c1b519a520fb64c2df3bd45ceb15b736eba55cf551b4803",
+      "png_sha256": "da4634454ac31c65f75d2f48fa05b8a1f544fc2c4a13cf8f85b6a6ee598c1838"
+    },
+    "PLUS": {
+      "feather": "plus",
+      "svg_sha256": "bbdd3b2aa207053acc46a5a180b94498ee770796be9980191ef8fa8f8b7552f5",
+      "png_sha256": "1e8665cd9c708c15ee21d841b85d061f02e580971b89d47fdaf4c3078808c0ab"
+    },
+    "POWER": {
+      "feather": "power",
+      "svg_sha256": "a78ba8d578c68b551735f58cd310a0f4022bc0cfb24b6696f5baeff22492623c",
+      "png_sha256": "44bf288c09a6bff484bdb1ea43789897dc2e596585c0df9fe1db8d41c3fe9bb0"
+    },
+    "QRCODE": {
+      "feather": "grid",
+      "svg_sha256": "2e2e434f899acff67a7aa1cdba68e2c78981d6cd8a105b39ff2093a134a6e315",
+      "png_sha256": "ebf81f48abd9366090ed47cef7ff7a8a5b5127d9fdc21d4a1fe69d59c60dc3a7"
+    },
+    "RESTART": {
+      "feather": "refresh-cw",
+      "svg_sha256": "fa58747f96ba81cdae6b6c3e9cce141102c4ea994a7c8421243b7ae0bf03d4b4",
+      "png_sha256": "ac89a60cd8bd8fec5e187fc9c7db24c465c11455df05bb17e238ebce87d85fb5"
+    },
+    "SEEDS": {
+      "feather": "key",
+      "svg_sha256": "f0aacbed8d0f7a279977392f92f4da73c35e905ac73b3c83320d54856e627eec",
+      "png_sha256": "ba76a0b87c24cd493f859aa10c88b7a43fc9a0246ec7fe92feb0ad3b923e7fa9"
+    },
+    "SETTINGS": {
+      "feather": "settings",
+      "svg_sha256": "6272c6980125e627ef7f985d379d5353793d9f46586f5ab3bf0630705233a216",
+      "png_sha256": "7f7cc0eeec3d52d9c122439cf06317b22b4b63658212cb8be679934eb1fe3a57"
+    },
+    "SIGN": {
+      "feather": "edit-3",
+      "svg_sha256": "14bd80f586884e90965948114aeaa4d144e89ed842302280b21b9b31e745cd48",
+      "png_sha256": "170ceecbc660e4b113f30b0682bdc0c38ab8a0fa22bdc35cab039c9e57dbfe0a"
+    },
+    "SPACE": {
+      "feather": "minus",
+      "svg_sha256": "ff3bc84553f2be35046def5daf0f95e9fb7d5645c722024bbec0c2428e3775a4",
+      "png_sha256": "5ab26812a27b42eb12805a068c045d52c4e98bfc6281f27666c0ef1d6f546f29"
+    },
+    "SUCCESS": {
+      "feather": "check-circle",
+      "svg_sha256": "2196776e3552a9a5693ba589080759313f718b43c2328e67d4444ef646136fb3",
+      "png_sha256": "1c9569a990a699d7469f414171d09f9f5e5946437bcc067d866d8ffb12340f18"
+    },
+    "TOOLS": {
+      "feather": "tool",
+      "svg_sha256": "d7d4626f8a65813bf872c00f1e7ce4983c03413a56f5ee14d9e8bb422131296b",
+      "png_sha256": "8b85738838b27ec5c0b3a0d13cb23069b7a5f140e0180487570e041806294ead"
+    },
+    "WARNING": {
+      "feather": "alert-triangle",
+      "svg_sha256": "85c5315136dd0a6f69675a4f37da40012278ab21e64712baf5dcad956c205e57",
+      "png_sha256": "d4833e7dcceed556488c87547b4050908b02bd578bb461e719f25500ec5f7ff0"
+    }
+  }
+}

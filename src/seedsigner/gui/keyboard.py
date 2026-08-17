@@ -1,6 +1,6 @@
 from dataclasses import dataclass
 from PIL import Image, ImageDraw, ImageFont
-from typing import Tuple
+from typing import List, Tuple
 from gettext import gettext as _
 
 from seedsigner.gui.components import Fonts, GUIConstants, SeedSignerIconConstants
@@ -207,12 +207,22 @@ class Keyboard:
                  additional_keys=[KEY_BACKSPACE],
                  auto_wrap=[WRAP_TOP, WRAP_BOTTOM, WRAP_LEFT, WRAP_RIGHT],
                  render_now=True,
-                 highlight_color: str = GUIConstants.ACCENT_COLOR):
+                 highlight_color: str = GUIConstants.ACCENT_COLOR,
+                 row_charsets: list = None):
         """
             `auto_wrap` specifies which edges the keyboard is allowed to loop back when
             navigating past the end.
+
+            `row_charsets` gives each row its own string, for layouts whose rows
+            are not all the same length (QWERTY is 10/9/7). Rows shorter than
+            `cols` are centred. When given, it replaces `charset`/`rows`.
         """
         self.draw = draw
+        self.row_charsets = row_charsets
+        if row_charsets:
+            charset = "".join(row_charsets)
+            rows = len(row_charsets)
+            cols = max(cols, max(len(row) for row in row_charsets))
         self.charset = charset
         self.rows = rows
         self.cols = cols
@@ -260,9 +270,19 @@ class Keyboard:
         cur_y = self.y_start
         for i in range(0, rows):
             cur_row = []
-            cur_x = self.x_start
+            if self.row_charsets:
+                row_letters = self.row_charsets[i]
+                # Centre a short row (QWERTY's middle and bottom rows).
+                row_span = len(row_letters) * (self.key_width + self.x_gap) - self.x_gap
+                if i == rows - 1 and additional_keys:
+                    extra = sum(k["size"] for k in additional_keys)
+                    row_span += extra * (self.key_width + self.x_gap)
+                cur_x = self.x_start + max(0, (self.width - row_span) // 2)
+            else:
+                row_letters = charset[i*cols:(i+1)*cols]
+                cur_x = self.x_start
             cur_index_x = 0
-            for letter in charset[i*cols:(i+1)*cols]:
+            for letter in row_letters:
                 is_selected = False
                 if letter == selected_char:
                     is_selected = True
@@ -532,6 +552,36 @@ class Keyboard:
         self.get_key_at(self.selected_key["x"], self.selected_key["y"]).is_selected = True
 
 
+    def get_key_at_screen_coords(self, screen_x: int, screen_y: int):
+        """
+        Find which key (if any) is at the given screen coordinates.
+
+        Args:
+            screen_x, screen_y: Screen coordinates in native space (240x240)
+
+        Returns:
+            Key object if found and active, None otherwise
+        """
+        # Check if within keyboard rect
+        if not (self.rect[0] <= screen_x <= self.rect[2] and
+                self.rect[1] <= screen_y <= self.rect[3]):
+            return None
+
+        # Find the key at these coordinates
+        for row_keys in self.keys:
+            for key in row_keys:
+                key_right = key.screen_x + self.key_width * key.size
+                key_bottom = key.screen_y + self.key_height
+                if (key.screen_x <= screen_x <= key_right and
+                    key.screen_y <= screen_y <= key_bottom):
+                    # Only return active keys - greyed out keys should be ignored
+                    if key.is_active:
+                        return key
+                    return None
+
+        return None
+
+
 
 class TextEntryDisplayConstants:
     CURSOR_MODE__BAR = "bar"
@@ -663,4 +713,306 @@ class TextEntryDisplay(TextEntryDisplayConstants):
 
         # Paste the display onto the main canvas
         self.canvas.paste(image, (self.rect[0], self.rect[1]))
+
+
+
+class T9Pad:
+    """
+    T9-style multi-tap keyboard for seed word entry.
+
+    Layout: 3 columns x 3 rows of letter keys (2-9) + DEL key.
+    Each key maps to 3-4 letters (standard phone layout).
+    Tapping the same key cycles through its letters.
+    """
+
+    # Standard phone T9 letter groups
+    T9_GROUPS = {
+        2: "abc",
+        3: "def",
+        4: "ghi",
+        5: "jkl",
+        6: "mno",
+        7: "pqrs",
+        8: "tuv",
+        9: "wxyz",
+    }
+
+    def __init__(self,
+                 draw: ImageDraw,
+                 rect: Tuple[int, int, int, int],
+                 highlight_color: str = GUIConstants.ACCENT_COLOR):
+        """
+        Args:
+            draw: ImageDraw surface
+            rect: (x1, y1, x2, y2) bounding box in native 240x240 coords
+            highlight_color: Color for selected/cycling key
+        """
+        self.draw = draw
+        self.rect = rect
+        self.highlight_color = highlight_color
+        self.background_color = GUIConstants.BUTTON_BACKGROUND_COLOR
+        self.deactivated_color = GUIConstants.BACKGROUND_COLOR
+
+        # Layout: 3 cols x 3 rows
+        self.cols = 3
+        self.rows = 3
+        self.x_gap = 2
+        self.y_gap = 2
+
+        width = rect[2] - rect[0]
+        height = rect[3] - rect[1]
+        self.key_width = (width - (self.cols - 1) * self.x_gap) // self.cols
+        self.key_height = (height - (self.rows - 1) * self.y_gap) // self.rows
+
+        # Fonts
+        self.number_font = Fonts.get_font(GUIConstants.FIXED_WIDTH_EMPHASIS_FONT_NAME, 20)
+        self.letter_font = Fonts.get_font(GUIConstants.FIXED_WIDTH_EMPHASIS_FONT_NAME, 14)
+        self.del_icon_font = Fonts.get_font(GUIConstants.ICON_FONT_NAME__SEEDSIGNER, 22)
+
+        # Key order: rows of [DEL,2,3], [4,5,6], [7,8,9]
+        # DEL replaces the '1' position (top-left, like a phone keypad)
+        self.key_layout = [
+            ["DEL", 2, 3],
+            [4, 5, 6],
+            [7, 8, 9],
+        ]
+
+        # Active state per key group: which letters are valid
+        self.active_letters: set = set("abcdefghijklmnopqrstuvwxyz")
+
+        # Selection state
+        self.selected_row = -1
+        self.selected_col = -1
+
+        # Cycling state
+        self.cycling_key = None      # Which T9 key number is cycling (2-9)
+        self.cycling_index = 0       # Index within the valid letters of that key
+        self.cycling_letter = None   # Current cycling letter
+
+        self.render_keys()
+
+    def _get_key_rect(self, col: int, row: int) -> Tuple[int, int, int, int]:
+        """Get pixel rect for key at grid position."""
+        x = self.rect[0] + col * (self.key_width + self.x_gap)
+        y = self.rect[1] + row * (self.key_height + self.y_gap)
+        return (x, y, x + self.key_width, y + self.key_height)
+
+    def get_valid_letters(self, key_num: int) -> List[str]:
+        """Get letters for a T9 key that are in the active set."""
+        if key_num not in self.T9_GROUPS:
+            return []
+        return [ch for ch in self.T9_GROUPS[key_num] if ch in self.active_letters]
+
+    def is_key_active(self, key_num: int) -> bool:
+        """Check if a T9 key has any valid letters."""
+        return len(self.get_valid_letters(key_num)) > 0
+
+    def update_active_letters(self, active_letters):
+        """Update which letters are valid (from BIP39 filtering)."""
+        self.active_letters = set(active_letters)
+
+    def render_keys(self):
+        """Render all T9 keys."""
+        # Clear the pad area
+        self.draw.rectangle(self.rect, fill=GUIConstants.BACKGROUND_COLOR)
+
+        for row_idx, row in enumerate(self.key_layout):
+            for col_idx, key_val in enumerate(row):
+                self._render_key(col_idx, row_idx, key_val)
+
+    def _render_key(self, col: int, row: int, key_val):
+        """Render a single T9 key."""
+        x1, y1, x2, y2 = self._get_key_rect(col, row)
+        is_selected = (row == self.selected_row and col == self.selected_col)
+
+        if key_val == "DEL":
+            # DEL key - always active
+            bg = self.highlight_color if is_selected else "#000"
+            font_color = "black" if is_selected else "#999"
+            self.draw.rounded_rectangle((x1, y1, x2, y2), fill=bg, radius=4, outline="#333")
+            # Draw delete icon centered
+            cx = (x1 + x2) // 2
+            cy = (y1 + y2) // 2 + 2
+            self.draw.text((cx, cy), SeedSignerIconConstants.DELETE, fill=font_color,
+                           font=self.del_icon_font, anchor="mm")
+            return
+
+        # Number key (2-9)
+        active = self.is_key_active(key_val)
+        is_cycling = (self.cycling_key == key_val)
+
+        if not active:
+            bg = self.deactivated_color
+            outline = self.deactivated_color
+            num_color = "#333"
+            letter_color = "#333"
+        elif is_cycling or is_selected:
+            bg = self.highlight_color
+            outline = self.highlight_color
+            num_color = "black"
+            letter_color = "black"
+        else:
+            bg = self.background_color
+            outline = "#333"
+            num_color = "#999"
+            letter_color = "#e8e8e8"
+
+        self.draw.rounded_rectangle((x1, y1, x2, y2), fill=bg, radius=4, outline=outline)
+
+        # Draw the number and its letters as one centred group. Anchoring the
+        # number to the key's top and the letters to its bottom reads fine on a
+        # short key, but the taller keys this panel allows would pull them to
+        # opposite ends and stop reading as one key.
+        cx = (x1 + x2) // 2
+        cy = (y1 + y2) // 2
+        group_gap = 3
+        num_y = cy - group_gap
+        self.draw.text((cx, num_y), str(key_val), fill=num_color,
+                       font=self.number_font, anchor="mb")
+
+        # Draw letters below, highlighting the cycling letter
+        letters = self.T9_GROUPS[key_val]
+        valid_letters = self.get_valid_letters(key_val)
+        letter_y = cy + group_gap + self.letter_font.size
+        spacing = 10 if len(letters) > 3 else 12
+        total_width = len(letters) * spacing
+        start_x = cx - total_width // 2
+
+        for i, ch in enumerate(letters):
+            lx = start_x + i * spacing + spacing // 2
+            if is_cycling and ch == self.cycling_letter:
+                # Cycling only ever lands on valid letters
+                lc = "black"
+            elif ch in valid_letters:
+                lc = letter_color
+            else:
+                lc = "#333"
+            self.draw.text((lx, letter_y), ch, fill=lc, font=self.letter_font, anchor="ms")
+
+    def get_key_at_screen_coords(self, x: int, y: int):
+        """
+        Find which T9 key was tapped.
+
+        Args:
+            x, y: Native coordinates (240x240)
+
+        Returns:
+            Key value (2-9 or "DEL") or None
+        """
+        if not (self.rect[0] <= x <= self.rect[2] and self.rect[1] <= y <= self.rect[3]):
+            return None
+
+        for row_idx, row in enumerate(self.key_layout):
+            for col_idx, key_val in enumerate(row):
+                x1, y1, x2, y2 = self._get_key_rect(col_idx, row_idx)
+                if x1 <= x <= x2 and y1 <= y <= y2:
+                    if key_val == "DEL":
+                        return "DEL"
+                    if self.is_key_active(key_val):
+                        return key_val
+                    return None
+        return None
+
+    def is_cycling_letter_valid(self) -> bool:
+        """Check if the current cycling letter is in the active set."""
+        return self.cycling_letter is not None and self.cycling_letter in self.active_letters
+
+    def start_cycling(self, key_num: int) -> str:
+        """
+        Start or continue cycling on a T9 key.
+
+        Cycles through only the letters that can still form a valid BIP39 word
+        given the committed prefix; invalid letters are shown dimmed and are
+        never offered.
+
+        Args:
+            key_num: T9 key (2-9)
+
+        Returns:
+            The current cycling letter, or None if key has no valid letters
+        """
+        valid_letters = self.get_valid_letters(key_num)
+        if not valid_letters:
+            return None
+
+        if self.cycling_key == key_num:
+            # Same key - advance to next valid letter
+            self.cycling_index = (self.cycling_index + 1) % len(valid_letters)
+        else:
+            # New key
+            self.cycling_key = key_num
+            self.cycling_index = 0
+
+        self.cycling_letter = valid_letters[self.cycling_index]
+
+        # Update selection visual
+        for row_idx, row in enumerate(self.key_layout):
+            for col_idx, key_val in enumerate(row):
+                if key_val == key_num:
+                    self.selected_row = row_idx
+                    self.selected_col = col_idx
+
+        return self.cycling_letter
+
+    def commit_cycling(self) -> str:
+        """
+        Commit the current cycling letter and reset cycling state.
+
+        Invalid letters (not in active set) are discarded - returns None.
+
+        Returns:
+            The committed letter, or None if not cycling or letter is invalid
+        """
+        letter = self.cycling_letter
+        is_valid = self.is_cycling_letter_valid()
+        self.cycling_key = None
+        self.cycling_index = 0
+        self.cycling_letter = None
+        self.selected_row = -1
+        self.selected_col = -1
+        return letter if is_valid else None
+
+    def cancel_cycling(self):
+        """Cancel cycling without committing."""
+        self.cycling_key = None
+        self.cycling_index = 0
+        self.cycling_letter = None
+        self.selected_row = -1
+        self.selected_col = -1
+
+    # --- Predictive ("best guess") mode helpers ---
+    # Pure functions: one tap per key, the wordlist disambiguates. Latin a-z only,
+    # same constraint as the multi-tap pad itself.
+
+    @classmethod
+    def word_to_key_seq(cls, word: str) -> List[int]:
+        """Map a word (or prefix) to its T9 key sequence, e.g. "zoo" -> [9, 6, 6]."""
+        seq = []
+        for ch in word:
+            for key, group in cls.T9_GROUPS.items():
+                if ch in group:
+                    seq.append(key)
+                    break
+            else:
+                raise ValueError(f"'{ch}' is not on the T9 pad")
+        return seq
+
+    @classmethod
+    def filter_words_by_key_seq(cls, wordlist: List[str], key_seq: List[int]) -> List[str]:
+        """
+        All words whose first len(key_seq) letters fall in the tapped key groups,
+        ranked shortest-first then alphabetical so exact-length matches surface
+        before longer completions ("act" before "action" for 2-2-8).
+        """
+        groups = [cls.T9_GROUPS[k] for k in key_seq]
+        matches = [
+            w for w in wordlist
+            if len(w) >= len(groups) and all(w[i] in g for i, g in enumerate(groups))
+        ]
+        return sorted(matches, key=lambda w: (len(w), w))
+
+    @staticmethod
+    def next_letters(words: List[str], position: int) -> str:
+        """The set of letters that appear at `position` across `words` (for key dimming)."""
+        return "".join(sorted({w[position] for w in words if len(w) > position}))
 

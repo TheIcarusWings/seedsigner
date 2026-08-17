@@ -10,3 +10,41 @@ src/seedsigner/models/settings_definition.json
 
 *.po
 *.mo
+
+# Local dev environment (touchscreen fork)
+.venv/
+src/seedsigner/resources/seedsigner-translations/
+seedsigner-screenshots/*/
+tools/image_build/out/
+
+# Local-only Raspberry Pi OS dev image tooling (validation aid, not shipped).
+# The committed image pipeline is SeedSignerOS/buildroot: tools/image_build/os
+tools/image_build/build.sh
+tools/image_build/Dockerfile
+tools/image_build/image.sh
+tools/image_build/stage2.sh
+tools/image_build/README.md
+
+# Project working docs: reviews, decisions, bring-up notes. Kept local so the
+# fork's diff against upstream stays code-only.
+/DECISIONS.md
+/SECURITY_REVIEW.md
+/UX_REVIEW.md
+/HARDWARE_BRINGUP.md
+tools/image_build/os/README.md
+
+# OS-level artifacts live in the seedsigner-os fork (board pi0-touch), which
+# mirrors how upstream splits the app repo from the image builder. Kept here
+# only so the local dev image build can use them.
+/config_dpi28.txt
+/cmdline_dpi28.txt
+/config_spi13.txt
+/setup_dpi28.sh
+/overlays_dpi28/
+tools/image_build/
+
+# Local screenshot layout auditor (dev aid)
+tools/audit_screens.py
+tools/build_review_page.py
+tools/export_penpot.py
+tools/export_layout.py

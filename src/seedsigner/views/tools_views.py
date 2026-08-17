@@ -247,6 +247,7 @@ class ToolsDiceEntropyMnemonicLengthView(View):
             ButtonListScreen,
             title=_("Mnemonic Length"),
             is_bottom_list=True,
+            touch_fill_tiles=True,
             is_button_text_centered=True,
             button_data=button_data,
         )
@@ -303,6 +304,7 @@ class ToolsCalcFinalWordNumWordsView(View):
             ButtonListScreen,
             title=_("Mnemonic Length"),
             is_bottom_list=True,
+            touch_fill_tiles=True,
             is_button_text_centered=True,
             button_data=button_data,
         )

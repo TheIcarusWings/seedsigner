@@ -22,10 +22,114 @@ logger = logging.getLogger(__name__)
 
 
 # TODO: Remove all pixel hard coding
+from functools import lru_cache
+
+
+# Supersample factor for anti-aliased shape edges. PIL's rounded_rectangle()
+# draws with NO anti-aliasing, so its arcs are a hard 1px staircase. On the
+# DPI panel that staircase is then doubled by the driver's 2x nearest-neighbour
+# upscale, which is what makes corners read as chunky. Drawing the shape large
+# and downsampling with LANCZOS gives real edge gradients instead.
+SHAPE_SUPERSAMPLE = 4
+
+
+def is_touch_ui() -> bool:
+    """
+    True only on the touchscreen build.
+
+    Every visual change this fork makes to SHARED components is gated on this,
+    so an ST7789/GPIO build renders exactly as upstream does. Keep it that way:
+    the fork is meant to stay mergeable.
+    """
+    return os.environ.get("SEEDSIGNER_TOUCH") == "1"
+
+
+FEATHER_ICON_DIR = pathlib.Path(__file__).parent.parent / "resources" / "icons" / "feather"
+
+
+@lru_cache(maxsize=1)
+def _feather_glyph_lookup() -> dict:
+    """
+    Map SeedSigner icon GLYPH -> Feather asset path.
+
+    Screens pass icons around as font glyphs (e.g. "\ue900"), so the lookup is
+    keyed by glyph rather than by constant name. Only icons with a faithful
+    Feather equivalent are present; everything else (bitcoin marks,
+    fingerprint, QR, microSD) keeps the SeedSigner glyph, which is also where
+    the brand is most recognisable.
+    """
+    lookup = {}
+    if not FEATHER_ICON_DIR.is_dir():
+        return lookup
+
+    # Both icon namespaces are covered. FontAwesome assets carry an "FA_"
+    # prefix so a shared constant name (e.g. CAMERA) cannot collide.
+    for constants_cls, prefix in ((SeedSignerIconConstants, ""),
+                                  (FontAwesomeIconConstants, "FA_")):
+        for const_name in dir(constants_cls):
+            if const_name.startswith("_") or not const_name.isupper():
+                continue
+            value = getattr(constants_cls, const_name)
+            if not isinstance(value, str):
+                continue
+            asset = FEATHER_ICON_DIR / f"{prefix}{const_name}.png"
+            if asset.is_file():
+                lookup.setdefault(value, asset)
+    return lookup
+
+
+@lru_cache(maxsize=128)
+def get_feather_icon_mask(asset_path: str, size: int) -> Image.Image:
+    """
+    Alpha mask for a Feather icon at `size` px (cached).
+
+    Assets ship at 128px and are LANCZOS-downscaled here, so one file serves
+    every on-screen size with clean anti-aliased strokes. Cached because the
+    same handful of (icon, size) pairs recur on every render - the Pi Zero
+    must not pay a resample per frame.
+    """
+    return Image.open(asset_path).convert("L").resize((size, size), Image.LANCZOS)
+
+
+@lru_cache(maxsize=64)
+def get_rounded_rect_mask(width: int, height: int, radius: int, outline_width: int = 0) -> Image.Image:
+    """
+    Anti-aliased alpha mask for a rounded rectangle (cached).
+
+    Buttons repeat a handful of (size, radius) combinations, so the
+    supersampled draw+downsample is paid once per combination and then reused
+    for every button on every render - it does not cost per-frame time.
+
+    outline_width > 0 returns a ring mask (the border only) instead of a
+    filled shape.
+    """
+    ss = SHAPE_SUPERSAMPLE
+    mask = Image.new("L", (width * ss, height * ss), 0)
+    draw = ImageDraw.Draw(mask)
+    draw.rounded_rectangle(
+        (0, 0, width * ss - 1, height * ss - 1),
+        radius=radius * ss,
+        fill=255,
+    )
+    if outline_width:
+        inset = outline_width * ss
+        draw.rounded_rectangle(
+            (inset, inset, width * ss - 1 - inset, height * ss - 1 - inset),
+            radius=max(0, (radius - outline_width)) * ss,
+            fill=0,
+        )
+    return mask.resize((width, height), Image.LANCZOS)
+
+
 class GUIConstants:
     EDGE_PADDING = 8
     COMPONENT_PADDING = 8
     LIST_ITEM_PADDING = 4
+
+    # Gap between a stacked icon and its label (Home tiles). Deliberately
+    # larger than COMPONENT_PADDING: these are big touch targets where the
+    # icon and label must read as two separate elements, not one crowded block.
+    STACKED_ICON_LABEL_PADDING = 16
 
     BACKGROUND_COLOR = "#000000"
     INACTIVE_COLOR = "#414141"
@@ -770,17 +874,47 @@ class Icon(BaseComponent):
     def __post_init__(self):
         super().__post_init__()
 
+        # Feather asset if we have one for this icon; otherwise the original
+        # glyph font. Both paths report the same width/height contract, so
+        # callers and layouts are unaffected either way.
+        # Feather assets are a touch-build change; GPIO builds keep the
+        # original glyph fonts so their UI is unchanged.
+        self.feather_asset = _feather_glyph_lookup().get(self.icon_name) if is_touch_ui() else None
+
         if SeedSignerIconConstants.MIN_VALUE <= self.icon_name and self.icon_name <= SeedSignerIconConstants.MAX_VALUE:
             self.icon_font = Fonts.get_font(GUIConstants.ICON_FONT_NAME__SEEDSIGNER, self.icon_size, file_extension="otf")
         else:
             self.icon_font = Fonts.get_font(GUIConstants.ICON_FONT_NAME__FONT_AWESOME, self.icon_size)
-        
+
         # Set width/height based on exact pixels that are rendered
         (left, top, self.width, bottom) = self.icon_font.getbbox(self.icon_name, anchor="ls")
         self.height = -1 * top
 
+        if self.feather_asset is not None:
+            # Feather icons live on a square 24x24 grid; that BOX is the
+            # alignment unit, which is what keeps a set visually consistent.
+            #
+            # Do NOT size them from the replaced glyph's ink bbox: that height
+            # varies per glyph, so every icon came out a different size (the
+            # QR mark rendered visibly larger and heavier than the text-entry
+            # mark next to it). Size the box from the requested icon_size so
+            # every icon occupies an identical square, and let the layout
+            # centre that square.
+            self.width = self.height = self.icon_size
+
 
     def render(self):
+        if self.feather_asset is not None:
+            size = max(1, int(self.height))
+            mask = get_feather_icon_mask(str(self.feather_asset), size)
+            # State comes from colour, never from a different asset.
+            self.canvas.paste(
+                Image.new("RGB", (size, size), self.icon_color),
+                (int(self.screen_x), int(self.screen_y)),
+                mask,
+            )
+            return
+
         self.image_draw.text(
             (self.screen_x, self.screen_y + self.height),
             text=self.icon_name,
@@ -1368,6 +1502,10 @@ class Button(BaseComponent):
     is_selected: bool = False
     is_scrollable_text: bool = True  # True: active state will automatically scroll if necessary, text is rendered once (not dynamic)
 
+    # Corner radius. Taller (touch-sized) rows need a proportionally larger
+    # radius, otherwise they read as harsher rectangles than the rest of the UI.
+    corner_radius: int = 8
+
 
     def __post_init__(self):
         if not self.font_name:
@@ -1467,8 +1605,31 @@ class Button(BaseComponent):
 
             else:
                 self.icon_x = int((self.width - self.icon.width) / 2)
-                if self.text:
+                if not is_touch_ui():
+                    # Upstream: icon sits at its offset, label below it.
                     self.text_y = self.icon_y + self.icon.height + GUIConstants.COMPONENT_PADDING
+                elif self.text:
+                    # Stacked icon-over-label (e.g. Home tiles): centre the
+                    # GROUP in the button.
+                    #
+                    # Previously the icon was pinned to a fixed top pad and the
+                    # label hung underneath, so every extra pixel of button
+                    # height pooled at the bottom: on the 240x320 canvas that
+                    # left an 8px gap above the icon and 60px below the label.
+                    # It only looked balanced while the tile happened to be
+                    # barely taller than icon+label.
+                    # Stacked tiles get a wider icon-to-label gap than the
+                    # generic component padding: at ~286 DPI the 8px default is
+                    # only ~1.4mm, which crowds a 48px icon against its label.
+                    gap = GUIConstants.STACKED_ICON_LABEL_PADDING
+                    group_height = self.icon.height + gap + self.text_height
+                    self.icon_y = max(0, int((self.height - group_height) / 2))
+                    # NOTE: the label is drawn by a ScrollableTextLine that is
+                    # positioned from text_y_OFFSET (not text_y), so both must
+                    # be set here - and this must run before the label kwargs
+                    # are built further down.
+                    self.text_y_offset = self.icon_y + self.icon.height + gap
+                    self.text_y = self.text_y_offset + self.text_height
 
         if self.right_icon_name:
             self.right_icon = Icon(icon_name=self.right_icon_name, icon_size=self.right_icon_size, icon_color=self.right_icon_color)
@@ -1523,6 +1684,30 @@ class Button(BaseComponent):
             self.inactive_button_label_kwargs = button_kwargs.copy()
 
 
+    def _render_antialiased_background(self, background_color, outline_color):
+        """
+        Anti-aliased fill for the touch build: paste a solid colour through a
+        cached, supersampled rounded mask. PIL's rounded_rectangle() has hard
+        stair-stepped corners, which the panel's 2x upscale doubles into
+        visible blocks.
+        """
+        # Some screens compute button geometry by division, so coerce: PIL
+        # paste boxes and image sizes must be ints.
+        w, h = int(self.width), int(self.height)
+        radius = int(self.corner_radius)
+        box = (int(self.screen_x), int(self.screen_y - self.scroll_y))
+        self.canvas.paste(
+            Image.new("RGB", (w, h), background_color),
+            box,
+            get_rounded_rect_mask(w, h, radius),
+        )
+        if outline_color:
+            self.canvas.paste(
+                Image.new("RGB", (w, h), outline_color),
+                box,
+                get_rounded_rect_mask(w, h, radius, outline_width=2),
+            )
+
     def render(self):
         if self.is_selected:
             background_color = self.selected_color
@@ -1533,18 +1718,22 @@ class Button(BaseComponent):
             font_color = self.font_color
             outline_color = self.outline_color
 
-        self.image_draw.rounded_rectangle(
-            (
-                self.screen_x,
-                self.screen_y - self.scroll_y,
-                self.screen_x + self.width,
-                self.screen_y + self.height - self.scroll_y
-            ),
-            fill=background_color,
-            radius=8,
-            outline=outline_color,
-            width=2,
-        )
+        if not is_touch_ui():
+            # Upstream rendering, untouched.
+            self.image_draw.rounded_rectangle(
+                (
+                    self.screen_x,
+                    self.screen_y - self.scroll_y,
+                    self.screen_x + self.width,
+                    self.screen_y + self.height - self.scroll_y
+                ),
+                fill=background_color,
+                radius=self.corner_radius,
+                outline=outline_color,
+                width=2,
+            )
+        else:
+            self._render_antialiased_background(background_color, outline_color)
 
         if self.text is not None:
             if not self.is_scrollable_text:

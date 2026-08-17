@@ -1,7 +1,7 @@
 import logging
 from gettext import gettext as _
 
-from seedsigner.gui.components import GUIConstants, SeedSignerIconConstants
+from seedsigner.gui.components import is_touch_ui, GUIConstants, SeedSignerIconConstants
 from seedsigner.gui.screens import (RET_CODE__BACK_BUTTON, ButtonListScreen, settings_screens)
 from seedsigner.gui.screens.screen import ButtonOption
 from seedsigner.models.settings import Settings, SettingsConstants, SettingsDefinition
@@ -15,7 +15,8 @@ logger = logging.getLogger(__name__)
 class SettingsMenuView(View):
     ADVANCED = ButtonOption("Advanced", right_icon_name=SeedSignerIconConstants.CHEVRON_RIGHT)
     HARDWARE = ButtonOption("Hardware", right_icon_name=SeedSignerIconConstants.CHEVRON_RIGHT)
-    IO_TEST = ButtonOption("I/O test")
+    # A touch build has no buttons to test, so this entry is a camera check.
+    IO_TEST = ButtonOption("Camera check") if is_touch_ui() else ButtonOption("I/O test")
     DONATE = ButtonOption("Donate")
     VERSION = ButtonOption("Version")
 

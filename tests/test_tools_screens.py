@@ -86,15 +86,25 @@ def make_mock_hw_inputs(left_script: list = None, anyclick_script: list = None) 
         return anyclick_feed.pop(0) if anyclick_feed else False
 
     hw_inputs.check_for_low.side_effect = check_for_low
+
+    # Touch-input query methods must default to "no tap" or the screens'
+    # hasattr-guarded touch branches will see truthy MagicMocks.
+    hw_inputs.get_tapped_button_index.return_value = -1
+    hw_inputs.was_back_button_tapped.return_value = False
+    hw_inputs.was_power_button_tapped.return_value = False
+    hw_inputs.was_touch_bar_back_tapped.return_value = False
     return hw_inputs
 
 
 def count_anyclick_checks(mock_hw_inputs: MagicMock) -> int:
     """
-    How many times the screen polled the ANYCLICK group.
+    How many times the screen polled the snap-button group (a keys= list).
+
+    Touch fork note: the snap check uses [KEY_PRESS, KEY2, KEY3] (KEY1 is the
+    back control on this screen), so count any multi-key poll rather than
+    asserting the exact upstream KEYS__ANYCLICK list.
     """
-    from seedsigner.hardware.buttons import HardwareButtonsConstants
-    return sum(1 for c in mock_hw_inputs.check_for_low.call_args_list if c.kwargs.get("keys") == HardwareButtonsConstants.KEYS__ANYCLICK)
+    return sum(1 for c in mock_hw_inputs.check_for_low.call_args_list if c.kwargs.get("keys"))
 
 
 

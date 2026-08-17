@@ -7,7 +7,7 @@ from PIL.ImageOps import autocontrast
 from typing import List
 
 from seedsigner.helpers.l10n import mark_for_translation as _mft
-from seedsigner.gui.components import Button, CheckboxButton, CheckedSelectionButton, FontAwesomeIconConstants, Fonts, GUIConstants, Icon, IconButton, IconTextLine, SeedSignerIconConstants, TextArea
+from seedsigner.gui.components import is_touch_ui, Button, CheckboxButton, CheckedSelectionButton, FontAwesomeIconConstants, Fonts, GUIConstants, Icon, IconButton, IconTextLine, SeedSignerIconConstants, TextArea
 from seedsigner.gui.screens.scan_screens import ScanScreen
 from seedsigner.gui.screens.screen import BaseScreen, BaseTopNavScreen, ButtonListScreen, ButtonOption
 from seedsigner.hardware.buttons import HardwareButtonsConstants
@@ -58,10 +58,22 @@ class IOTestScreen(BaseTopNavScreen):
         # TRANSLATOR_NOTE: Short for "Input/Output"; screen to make sure the buttons and camera are working properly
         self.title = _("I/O Test")
         self.show_back_button = False
+        if is_touch_ui():
+            # TRANSLATOR_NOTE: Screen to make sure the camera is working properly
+            self.title = _("Camera Check")
+            # Touch has no hardware key to exit with, so use the top nav arrow.
+            self.show_back_button = True
         self.resolution = (96, 96)
         self.framerate = 10
         self.instructions_text = None
         super().__post_init__()
+
+        if is_touch_ui():
+            # A touch build has no d-pad and no hardware keys, so the input half
+            # of this test has nothing to exercise. All that is left to check is
+            # the camera, and the screen says so.
+            self._setup_camera_check()
+            return
 
         # D-pad pictogram
         input_button_width = GUIConstants.BUTTON_HEIGHT + 2
@@ -174,7 +186,63 @@ class IOTestScreen(BaseTopNavScreen):
         self.components.append(self.key3_button)
 
 
+    def _setup_camera_check(self):
+        """Touch layout: an instruction and a shutter control drawn on the canvas."""
+        self._set_touch_bar('TOUCH_BAR_HIDDEN')
+        self.capture_button = self._make_touch_controls([dict(
+            # TRANSLATOR_NOTE: Takes a photo
+            text=_("Take photo"),
+            key=HardwareButtonsConstants.KEY1,
+        )])[0]
+        self.components.append(self.capture_button)
+
+        # TRANSLATOR_NOTE: Instructions for the camera check screen
+        text = _("Check that the camera is working.")
+        # TextArea lays itself out in __post_init__, so measure it once to learn
+        # its height, then build it again at the y that centres it in the space
+        # between the title bar and the shutter.
+        height = TextArea(text=text, is_text_centered=True).height
+        instructions = TextArea(
+            text=text,
+            is_text_centered=True,
+            screen_y=self.top_nav.height + int(
+                (self.capture_button.screen_y - self.top_nav.height - height) / 2
+            ),
+        )
+        self.components.append(instructions)
+
+
+    def _run_camera_check(self):
+        """Touch build: the top nav arrow exits, the on-canvas control captures."""
+        while True:
+            input = self.hw_inputs.wait_for(keys=[HardwareButtonsConstants.KEY_PRESS])
+
+            if hasattr(self.hw_inputs, 'was_back_button_tapped') and self.hw_inputs.was_back_button_tapped():
+                return
+            if self._tapped_touch_control_key() != HardwareButtonsConstants.KEY1:
+                continue
+
+            camera = Camera.get_instance()
+            try:
+                camera.start_single_frame_mode(resolution=(self.canvas_width, self.canvas_height))
+                time.sleep(0.25)
+                background_frame = camera.capture_frame()
+                with self.renderer.lock:
+                    self.canvas.paste(
+                        autocontrast(background_frame, cutoff=2),
+                        (0, self.top_nav.height),
+                    )
+                    self.top_nav.render()
+                    self.capture_button.render()
+                    self.renderer.show_image()
+            finally:
+                camera.stop_single_frame_mode()
+
+
     def _run(self):
+        if is_touch_ui():
+            return self._run_camera_check()
+
         cur_selected_button = self.key1_button
         msg_height = GUIConstants.ICON_LARGE_BUTTON_SIZE + 2*GUIConstants.COMPONENT_PADDING
         camera_message = TextArea(
@@ -294,6 +362,7 @@ class IOTestScreen(BaseTopNavScreen):
 
 @dataclass
 class DonateScreen(BaseTopNavScreen):
+    touch_center_body = True
     def __post_init__(self):
         self.title = _("Donate")
         super().__post_init__()
